@@ -1,0 +1,9 @@
+project_id = "commonplace"
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+enable_signup = false
+[auth.email]
+enable_signup = false
+[functions.explain]
+verify_jwt = false

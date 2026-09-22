@@ -1,0 +1,35 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Application dependencies and outputs
+node_modules/
+dist/
+build/
+.next/
+coverage/
+playwright-report/
+test-results/
+*.log
+*.tsbuildinfo
+
+# Private runtime data: use these directories for personal content
+private-data/
+uploads/
+exports/
+backups/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+
+# Local tools and OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.vercel/
+tmp/
