@@ -32,4 +32,5 @@ Thumbs.db
 .idea/
 .vscode/
 .vercel/
+supabase/.temp/
 tmp/

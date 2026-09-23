@@ -7,9 +7,23 @@ await db.exec(`create role anon; create role authenticated; create role service_
 create schema auth; create table auth.users(id uuid primary key);
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
 grant usage on schema public,auth to anon,authenticated,service_role;
-grant execute on function auth.uid() to anon,authenticated,service_role;`);
+grant execute on function auth.uid() to anon,authenticated,service_role;
+-- Match hosted Supabase's direct default grants, in addition to PUBLIC.
+alter default privileges for role postgres in schema public grant execute on functions to anon,authenticated,service_role;`);
 await db.exec(
-  await readFile("supabase/migrations/202609220001_workspace.sql", "utf8"),
+  await readFile("supabase/migrations/20260922233052_workspace.sql", "utf8"),
+);
+await db.exec(
+  `create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text);alter table storage.objects enable row level security;grant usage on schema storage to authenticated;grant select,insert,delete on storage.objects to authenticated;create function storage.foldername(name text) returns text[] language sql immutable as $$select string_to_array(name,'/')$$;`,
+);
+await db.exec(
+  await readFile("supabase/migrations/20260922233110_storage.sql", "utf8"),
+);
+await db.exec(
+  await readFile(
+    "supabase/migrations/20260922233216_restrict_api_function_privileges.sql",
+    "utf8",
+  ),
 );
 const owner = randomUUID(),
   outsider = randomUUID(),
@@ -38,6 +52,25 @@ const pass = (name) => {
   checks++;
   console.log(`PASS ${name}`);
 };
+const privileges = (
+  await db.query(`select proname,
+  has_function_privilege('anon',p.oid,'execute') as anon,
+  has_function_privilege('authenticated',p.oid,'execute') as authenticated,
+  has_function_privilege('service_role',p.oid,'execute') as service_role
+  from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public'`)
+).rows;
+for (const fn of privileges) {
+  assert.equal(fn.anon, false, `${fn.proname} must not be anonymous`);
+  if (
+    ["reserve_generation", "finish_generation", "purge_expired_trash"].includes(
+      fn.proname,
+    )
+  ) {
+    assert.equal(fn.authenticated, false, `${fn.proname} must be server-only`);
+    assert.equal(fn.service_role, true);
+  }
+}
+pass("hosted default function grants cannot expose privileged RPCs");
 await as("anon");
 await assert.rejects(
   () => db.query("select * from records"),
@@ -199,12 +232,6 @@ await as("authenticated", owner);
 await assert.rejects(() => save(entry, "entry", entryData, 4), /retention/);
 pass("expired trash cannot be silently resurrected");
 await as("postgres");
-await db.exec(
-  `create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text);alter table storage.objects enable row level security;grant usage on schema storage to authenticated;grant select,insert,delete on storage.objects to authenticated;create function storage.foldername(name text) returns text[] language sql immutable as $$select string_to_array(name,'/')$$;`,
-);
-await db.exec(
-  await readFile("supabase/migrations/202609220002_storage.sql", "utf8"),
-);
 await as("authenticated", owner);
 await db.query(
   "insert into storage.objects(bucket_id,name) values('journal',$1)",

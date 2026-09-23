@@ -6,7 +6,7 @@ Updated September 22, 2026. Unanswered questions are not approval of their propo
 
 The owner explicitly approved React/TypeScript/Vite, Supabase, Vercel Hobby, CodeMirror live Markdown, PDF.js and Gemini 2.5 Flash with conservative atomic cost reservations. Hosting starts on free allowances without automatic paid upgrades. Completion is manual; reflection is optional and separate. Include notebook management, history/search, source links, selected context approval, structured visuals, revision recovery, ZIP backups and 30-day trash. Use a dark shell with notebook accents plus a light toggle. Inline images ship first; art wrapping and portfolio publishing do not ship in V1. See the version 0.4 contract and implementation status.
 
-The owner needs to create Supabase and Gemini credentials. No live API entitlement is assumed from consumer subscriptions. Fresh secrets/passwords stay outside chat and Git.
+Supabase is provisioned and the confirmed owner account is assigned; Vercel is deployed. Fresh secrets/passwords stay outside chat and Git. On September 22, 2026, the required model-availability review found Google limiting Gemini 2.5 to prior users. The implementation defaults to stable Gemini 3.5 Flash-Lite at the same standard input/output rates ($0.30/$2.50 per million tokens), with medium thinking and the existing conservative output/cost limits. There is no automatic model fallback. This deployment adjustment does not change scope or the $20 ceiling. Real scientific quality evaluation remains a release gate. [Models](https://ai.google.dev/gemini-api/docs/models), [pricing](https://ai.google.dev/gemini-api/docs/pricing).
 
 ## Confirmed
 

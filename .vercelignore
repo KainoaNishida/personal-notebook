@@ -1,0 +1,13 @@
+# Deploy only application/build inputs. Private content and local secrets stay here.
+*
+!src
+!src/**
+!public
+!public/**
+!index.html
+!package.json
+!package-lock.json
+!tsconfig.json
+!vite.config.ts
+!vercel.json
+!.vercelignore

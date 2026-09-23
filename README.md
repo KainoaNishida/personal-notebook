@@ -6,7 +6,7 @@ The daily journal is the anchor. Gym, paper reading, topic research, art, and re
 
 ## Project status
 
-Commonplace V1 implementation, September 22, 2026: React/TypeScript/Vite, CodeMirror, PDF.js, and Supabase. The journal, paper workspace, server-side AI flow and reliability features are implemented locally. **Not released:** Supabase/Gemini provisioning and hosted end-to-end verification remain open. See [implementation status](docs/IMPLEMENTATION-STATUS.md) and [deployment setup](docs/DEPLOYMENT.md).
+Commonplace V1 implementation, September 22, 2026: React/TypeScript/Vite, CodeMirror, PDF.js, and Supabase. The frontend and private backend are deployed at [Commonplace](https://commonplace-kainoa-nishidas-projects.vercel.app). Gemini server credentials and password recovery are configured. **In release verification:** owner sign-in and hosted end-to-end acceptance remain open. See [implementation status](docs/IMPLEMENTATION-STATUS.md) and [deployment setup](docs/DEPLOYMENT.md).
 
 ## Run and verify
 

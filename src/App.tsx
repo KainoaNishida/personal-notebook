@@ -61,6 +61,7 @@ import type {
 } from "./domain";
 import * as api from "./service";
 import { useRecords, useSave, useDraft } from "./hooks";
+import { AuthGate } from "./components/AuthGate";
 import type { EditorHandle } from "./components/Editor";
 import { Empty, ErrorNotice, Modal, SubjectIcon } from "./components/UI";
 import type { Selection } from "./components/PdfViewer";
@@ -86,128 +87,12 @@ export default function App() {
             <div className="loading-screen">Opening your workspace…</div>
           }
         >
-          <AuthGate />
+          <AuthGate>
+            <Workspace />
+          </AuthGate>
         </Suspense>
       </BrowserRouter>
     </QueryClientProvider>
-  );
-}
-function AuthGate() {
-  const [ready, setReady] = useState(api.demo),
-    [signed, setSigned] = useState(api.demo),
-    [email, setEmail] = useState(""),
-    [password, setPassword] = useState(""),
-    [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (api.demo) return;
-    void api
-      .getSession()
-      .then((s) => {
-        setSigned(!!s);
-        setReady(true);
-      })
-      .catch((e) => {
-        setError(e.message);
-        setReady(true);
-      });
-    const sub = api.supabase?.auth.onAuthStateChange((_e, s) => {
-      setSigned(!!s);
-      if (!s) client.clear();
-    });
-    return () => sub?.data.subscription.unsubscribe();
-  }, []);
-  async function login(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError("");
-    try {
-      await api.signIn(email, password);
-      setPassword("");
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  if (!ready)
-    return <div className="loading-screen">Opening your commonplace…</div>;
-  if (signed) return <Workspace />;
-  return (
-    <div className="login">
-      <div className="login-story">
-        <div className="brand">
-          <BookOpen size={26} />
-          <span>
-            commonplace<span className="brand-dot">.</span>
-          </span>
-        </div>
-        <p className="eyebrow">A PRIVATE PLACE TO RETURN TO</p>
-        <h1>
-          A little more curious.
-          <br />A little, every day.
-        </h1>
-        <p>
-          Your ideas, your questions, your small discoveries.
-          <br />A notebook for a life in progress.
-        </p>
-        <div className="login-art">
-          <span />
-          <span />
-          <span />
-        </div>
-        <small>WRITE · EXPLORE · REFLECT</small>
-      </div>
-      <div className="login-form">
-        <Sprout size={28} />
-        <h2>Welcome back.</h2>
-        <p className="muted">A quiet space for what you’re learning.</p>
-        {api.configured ? (
-          <form onSubmit={login}>
-            <label className="field">
-              Email
-              <input
-                required
-                type="email"
-                autoComplete="username"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </label>
-            <label className="field">
-              Password
-              <input
-                required
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </label>
-            <ErrorNotice error={error} />
-            <button className="primary wide" disabled={busy}>
-              {busy ? "Signing in…" : "Open my notebook"}
-              <ArrowUpRight size={16} />
-            </button>
-            <p className="small muted">
-              Single-owner workspace. Public registration is closed.
-            </p>
-          </form>
-        ) : (
-          <div className="context-card">
-            <h3>Your workspace is ready to connect.</h3>
-            <p className="muted">
-              Configure the private backend to enable sign-in, sync, and your
-              notebooks. See the deployment guide in this repository.
-            </p>
-            <p className="small muted">
-              No private data or shared password is included in this
-              application.
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
   );
 }
 function Workspace() {

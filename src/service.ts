@@ -20,7 +20,9 @@ import type {
 } from "./domain";
 
 const url = import.meta.env.VITE_SUPABASE_URL,
-  key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  key =
+    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const configured = Boolean(url && key);
 export const demo =
   import.meta.env.DEV && import.meta.env.VITE_DEMO_MODE === "true";

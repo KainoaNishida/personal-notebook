@@ -28,9 +28,12 @@ const publicConfig = await config(".env.local"),
 let ready = true;
 for (const [name, value] of Object.entries({
   ...Object.fromEntries(
-    ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"].map((k) => [
+    ["VITE_SUPABASE_URL", "VITE_SUPABASE_PUBLISHABLE_KEY"].map((k) => [
       k,
-      publicConfig[k],
+      publicConfig[k] ||
+        (k === "VITE_SUPABASE_PUBLISHABLE_KEY"
+          ? publicConfig.VITE_SUPABASE_ANON_KEY
+          : undefined),
     ]),
   ),
   ...Object.fromEntries(
