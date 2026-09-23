@@ -15,6 +15,12 @@ Live app: https://commonplace-kainoa-nishidas-projects.vercel.app
 - Gemini Edge Function with approved context, validated responses, persistent results and atomic $20 UTC monthly reservations.
 - ZIP export/restore with ID remapping, recoverable trash and scheduled retention migration.
 
+### Password-only entrance
+
+The owner requested a minimal sign-in page: a centered “Password to enter” field, an inline submit arrow, and a small password-recovery link. The existing Supabase Auth password still applies; `VITE_OWNER_EMAIL` provides the owner identifier internally for sign-in and explicit reset requests. No password or secret key is embedded in the frontend. The README remains the owner's single requested sentence.
+
+Verification for this change: **33 unit tests passed**, including owner credential mapping, failed sign-in, successful Auth session transition, and reset/recovery behavior. The production build passed, and its authentication gate and centered layout were checked at 1280×800 and 640×400 with screenshots reviewed.
+
 ## Automated verification
 
 Latest full behavior run: **29 Vitest tests, 7 Playwright workflows and 16 database behavior checks passed**. TypeScript, Vite production build and Deno function checks pass. Public hosted access checks passed after private notes, files and AI results existed. An earlier production-build test verified that development preview storage cannot bypass authentication; dependency audit reported zero known vulnerabilities.

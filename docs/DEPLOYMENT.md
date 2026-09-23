@@ -23,7 +23,9 @@ insert into public.app_owner (user_id) values ('YOUR_AUTH_USER_UUID');
 
 No client may claim or change the owner. A second authenticated user still cannot access the owner's records or files. The `journal` bucket is private, with immutable object paths.
 
-If the initial password is unknown, use “Forgot or haven’t set a password?” on the sign-in screen. The owner requests an email link, opens the newest link, and chooses a unique password of at least 12 characters. Recovery emails return to `https://commonplace-kainoa-nishidas-projects.vercel.app/?reset=1`, which is explicitly allowlisted in Auth URL Configuration. Keep this exact redirect when moving domains. Reset links expire; request a new link rather than reusing an old one. Passwords are entered by the owner and never sent through chat.
+The sign-in screen asks only for a password. `VITE_OWNER_EMAIL` supplies the existing owner's email internally to Supabase Auth; the journal password is unchanged. This is the Supabase Auth user's password, not a Supabase dashboard or database password. The email is a public client identifier, not a secret or an authorization rule; database and storage policies continue to enforce the owner UUID.
+
+If the password is unknown, use “Forgot password?” on the sign-in screen. The reset request goes to the configured owner without an email field. The owner opens the newest email link and chooses a unique password of at least 12 characters. Recovery emails return to `https://commonplace-kainoa-nishidas-projects.vercel.app/?reset=1`, which is explicitly allowlisted in Auth URL Configuration. Keep this exact redirect when moving domains. Reset links expire; request a new link rather than reusing an old one. Passwords are entered by the owner and never sent through chat.
 
 Ignored `.env.local` and `.env.supabase.local` placeholders have been prepared in this checkout. Run `npm run check:setup` to report missing configuration names without printing credential values.
 
@@ -34,6 +36,7 @@ Copy `.env.example` to ignored `.env.local`:
 ```dotenv
 VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLIC_PUBLISHABLE_KEY
+VITE_OWNER_EMAIL=YOUR_OWNER_EMAIL
 VITE_DEMO_MODE=false
 ```
 
@@ -68,7 +71,7 @@ Supabase supplies `SUPABASE_URL` and `SUPABASE_SECRET_KEYS` (JSON map, `default`
 
 The checkout is linked to `kainoa-nishidas-projects/commonplace`, deployed at https://commonplace-kainoa-nishidas-projects.vercel.app . It uses Vite, Node 24, `npm run build`, output `dist`. `vercel.json` supplies routing and response headers. `.vercelignore` permits only application/build inputs; use `vercel deploy --dry --json` to inspect the upload before deploying changes. No paid resource is required.
 
-Set the three public frontend variables above in Vercel. Redeploy after changing them; Vite bakes them into its bundle. Gemini and service-role secrets belong only in Supabase. Set Supabase Auth Site URL and the function's `APP_ORIGIN` to the production origin.
+Set the four public frontend variables above in Vercel. Redeploy after changing them; Vite bakes them into its bundle. Gemini and service-role secrets belong only in Supabase. Set Supabase Auth Site URL and the function's `APP_ORIGIN` to the production origin.
 
 Verify a preview, then promote it. A working setup/login screen alone is not a completed release.
 

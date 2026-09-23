@@ -24,6 +24,7 @@ const url = import.meta.env.VITE_SUPABASE_URL,
     import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
     import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const configured = Boolean(url && key);
+export const ownerEmail = (import.meta.env.VITE_OWNER_EMAIL || "").trim();
 export const demo =
   import.meta.env.DEV && import.meta.env.VITE_DEMO_MODE === "true";
 export const supabase = configured ? createClient(url, key) : null;
@@ -92,9 +93,13 @@ export async function getSession(): Promise<Session | null> {
   if (r.error) throw r.error;
   return r.data.session;
 }
-export async function signIn(email: string, password: string) {
+export async function signIn(password: string) {
   if (!supabase) throw new Error("Backend is not configured.");
-  const r = await supabase.auth.signInWithPassword({ email, password });
+  if (!ownerEmail) throw new Error("The workspace owner is not configured.");
+  const r = await supabase.auth.signInWithPassword({
+    email: ownerEmail,
+    password,
+  });
   if (r.error) throw r.error;
 }
 export async function signOut() {

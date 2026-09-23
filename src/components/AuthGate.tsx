@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, BookOpen, Sprout } from "lucide-react";
+import { ArrowRight, LoaderCircle } from "lucide-react";
 import * as api from "../service";
 import { ErrorNotice } from "./UI";
 
@@ -19,7 +19,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
   );
   const [ready, setReady] = useState(api.demo);
   const [signed, setSigned] = useState(api.demo);
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState("");
@@ -77,7 +76,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     try {
       if (mode === "request") {
         const result = await api.supabase!.auth.resetPasswordForEmail(
-          email.trim(),
+          api.ownerEmail,
           {
             redirectTo: `${window.location.origin}/?reset=1`,
           },
@@ -94,7 +93,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
         window.history.replaceState(null, "", window.location.pathname);
         setMode("login");
       } else {
-        await api.signIn(email.trim(), password);
+        await api.signIn(password);
         setPassword("");
       }
     } catch (cause) {
@@ -109,70 +108,65 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (signed && mode !== "recovery") return <>{children}</>;
   const expired = mode === "recovery" && !signed;
   return (
-    <div className="login">
-      <div className="login-story">
-        <div className="brand">
-          <BookOpen size={26} />
-          <span>
-            commonplace<span className="brand-dot">.</span>
-          </span>
-        </div>
-        <p className="eyebrow">A PRIVATE PLACE TO RETURN TO</p>
-        <h1>
-          A little more curious.
-          <br />A little, every day.
-        </h1>
-        <p>
-          Your ideas, your questions, your small discoveries.
-          <br />A notebook for a life in progress.
-        </p>
-        <div className="login-art">
-          <span />
-          <span />
-          <span />
-        </div>
-        <small>WRITE · EXPLORE · REFLECT</small>
-      </div>
-      <div className="login-form">
-        <Sprout size={28} />
-        <h2>
+    <main className="login">
+      <section className="login-form">
+        <h1 id="auth-heading">
           {mode === "recovery"
-            ? "Choose your password."
+            ? "Choose your password"
             : mode === "request"
-              ? "Find your way back."
-              : "Welcome back."}
-        </h2>
-        <p className="muted">
-          {mode === "login"
-            ? "A quiet space for what you’re learning."
-            : mode === "request"
-              ? "We’ll email a link to set a new journal password."
+              ? "Reset your password"
+              : "Password to enter"}
+        </h1>
+        {mode !== "login" && (
+          <p className="muted">
+            {mode === "request"
+              ? "Send a reset link to your account’s email."
               : "Use a unique password with at least 12 characters."}
-        </p>
-        {api.configured ? (
-          <form onSubmit={submit}>
-            {mode !== "recovery" && (
-              <label className="field">
-                Email
+          </p>
+        )}
+        {api.configured && api.ownerEmail ? (
+          <form onSubmit={submit} aria-busy={busy}>
+            {mode === "login" && (
+              <div className="password-entry">
                 <input
-                  required
-                  type="email"
+                  type="hidden"
+                  name="username"
                   autoComplete="username"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={api.ownerEmail}
+                  readOnly
                 />
-              </label>
+                <input
+                  id="entry-password"
+                  required
+                  type="password"
+                  name="password"
+                  aria-labelledby="auth-heading"
+                  autoComplete="current-password"
+                  disabled={busy}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button
+                  type="submit"
+                  disabled={busy}
+                  aria-label={busy ? "Signing in" : "Enter notebook"}
+                >
+                  {busy ? (
+                    <LoaderCircle size={18} aria-hidden="true" />
+                  ) : (
+                    <ArrowRight size={18} aria-hidden="true" />
+                  )}
+                </button>
+              </div>
             )}
-            {mode !== "request" && !expired && (
+            {mode === "recovery" && !expired && (
               <label className="field">
-                {mode === "recovery" ? "New password" : "Password"}
+                New password
                 <input
                   required
                   type="password"
-                  minLength={mode === "recovery" ? 12 : undefined}
-                  autoComplete={
-                    mode === "recovery" ? "new-password" : "current-password"
-                  }
+                  minLength={12}
+                  autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
@@ -200,26 +194,22 @@ export function AuthGate({ children }: { children: ReactNode }) {
             />
             {sent && (
               <p role="status">
-                If this email belongs to the workspace owner, a reset link is on
-                its way. Check your inbox and spam folder, then open the newest
-                link.
+                A reset link is on its way. Check your inbox and spam folder,
+                then open the newest link.
               </p>
             )}
-            {!expired && (
+            {mode !== "login" && !expired && (
               <button className="primary wide" disabled={busy || sent}>
                 {busy
                   ? "One moment…"
                   : mode === "request"
                     ? "Send reset link"
-                    : mode === "recovery"
-                      ? "Save password and open notebook"
-                      : "Open my notebook"}
-                <ArrowUpRight size={16} />
+                    : "Save password and open notebook"}
               </button>
             )}
             <button
               type="button"
-              className="wide"
+              className="login-help"
               disabled={busy}
               onClick={() =>
                 switchMode(mode === "request" ? "login" : "request")
@@ -228,12 +218,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
               {mode === "request"
                 ? "Back to sign in"
                 : mode === "login"
-                  ? "Forgot or haven’t set a password?"
+                  ? "Forgot password?"
                   : "Request a new reset link"}
             </button>
-            <p className="small muted">
-              Single-owner workspace. Public registration is closed.
-            </p>
           </form>
         ) : (
           <div className="context-card">
@@ -248,7 +235,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
             </p>
           </div>
         )}
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
