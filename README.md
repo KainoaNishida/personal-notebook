@@ -1,6 +1,6 @@
 # Personal Note Taker
 
-A private journal for Kainoa's daily reflection, personal goals, art, and scientific learning.
+This notebook is for my own use, at least for now.
 
 The daily journal is the anchor. Gym, paper reading, topic research, art, and reading are flexible goals; an unfinished activity is not a failed day. Each notebook should feel suited to its subject, with particular attention to the interface and scientific paper workspace.
 
