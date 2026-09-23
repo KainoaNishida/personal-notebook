@@ -30,11 +30,13 @@ export function PdfViewer({
   paper,
   records,
   activeAnnotation,
+  focusKey,
   onSelect,
 }: {
   paper: RecordItem<"paper">;
   records: Snapshot;
   activeAnnotation?: RecordItem<"annotation">;
+  focusKey?: string;
   onSelect: (s: Selection, explain: boolean) => Promise<void>;
 }) {
   const asset = ofKind(records, "asset").find(
@@ -91,12 +93,17 @@ export function PdfViewer({
       void task?.destroy();
     };
   }, [blob.data]);
+  const anchorId = activeAnnotation?.id;
+  const anchorPaper = activeAnnotation?.data.paperId;
+  const anchorPage = activeAnnotation?.data.page;
+  const anchorX = activeAnnotation?.data.rects[0]?.x;
+  const anchorY = activeAnnotation?.data.rects[0]?.y;
   useEffect(() => {
-    if (activeAnnotation?.data.paperId === paper.id) {
-      setPage(activeAnnotation.data.page + 1);
+    if (anchorPaper === paper.id && anchorPage !== undefined) {
+      setPage(anchorPage + 1);
       setSelection(undefined);
     }
-  }, [activeAnnotation, paper.id]);
+  }, [anchorId, anchorPaper, anchorPage, paper.id, focusKey]);
   useEffect(() => {
     if (!doc) return;
     let stopped = false,
@@ -161,15 +168,29 @@ export function PdfViewer({
     };
   }, [doc, page, zoom, width]);
   useEffect(() => {
-    const r = activeAnnotation?.data.rects[0];
-    if (ready && r && activeAnnotation?.data.page === page - 1) {
+    if (
+      ready &&
+      anchorX !== undefined &&
+      anchorY !== undefined &&
+      anchorPage === page - 1
+    ) {
       scroll.current?.scrollTo({
-        top: Math.max(0, r.y * size.height - 80),
-        left: Math.max(0, r.x * size.width - 80),
+        top: Math.max(0, anchorY * size.height - 80),
+        left: Math.max(0, anchorX * size.width - 80),
         behavior: "smooth",
       });
     }
-  }, [ready, activeAnnotation, page, size]);
+  }, [
+    ready,
+    anchorId,
+    anchorPage,
+    anchorX,
+    anchorY,
+    page,
+    size.width,
+    size.height,
+    focusKey,
+  ]);
   async function crop(rect: Rect) {
     const c = canvas.current!;
     const out = document.createElement("canvas");
@@ -406,8 +427,18 @@ export function PdfViewer({
                 start.current = undefined;
                 if (!beginning) return;
                 const bounds = e.currentTarget.getBoundingClientRect();
-                const x = e.clientX - bounds.x, y = e.clientY - bounds.y;
-                const r = normalizeRect({x:Math.min(x,beginning.x),y:Math.min(y,beginning.y),width:Math.abs(x-beginning.x),height:Math.abs(y-beginning.y)},bounds.width,bounds.height);
+                const x = e.clientX - bounds.x,
+                  y = e.clientY - bounds.y;
+                const r = normalizeRect(
+                  {
+                    x: Math.min(x, beginning.x),
+                    y: Math.min(y, beginning.y),
+                    width: Math.abs(x - beginning.x),
+                    height: Math.abs(y - beginning.y),
+                  },
+                  bounds.width,
+                  bounds.height,
+                );
                 if (r.width > 0.01 && r.height > 0.01) {
                   void crop(r)
                     .then((image) =>

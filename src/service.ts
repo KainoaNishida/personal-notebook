@@ -75,6 +75,12 @@ function preview(): Snapshot {
   return v ? JSON.parse(v) : sample();
 }
 export const recoveryPrefix = "commonplace:recovery:";
+export function hasRecovery(id: string) {
+  const base = recoveryPrefix + id;
+  return Object.keys(localStorage).some(
+    (k) => k === base || k.startsWith(base + ":"),
+  );
+}
 export function clearRecovery() {
   Object.keys(localStorage)
     .filter((k) => k.startsWith(recoveryPrefix))

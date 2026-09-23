@@ -9,6 +9,7 @@ import {
   useNavigate,
   useParams,
   useSearchParams,
+  useLocation,
 } from "react-router-dom";
 import {
   QueryClient,
@@ -358,8 +359,10 @@ function EntryList({
               <div>
                 <h3>{e.data.title || "Untitled thought"}</h3>
                 <p>
-                  {e.data.markdown.replace(/[#*>`\[\]]/g, "").slice(0, 105) ||
-                    "A fresh page, ready when you are."}
+                  {e.data.markdown
+                    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+                    .replace(/[#*>`\[\]]/g, "")
+                    .slice(0, 105) || "A fresh page, ready when you are."}
                 </p>
                 <span className="small muted">
                   {n?.data.name} <span className="sep">·</span>{" "}
@@ -604,7 +607,10 @@ function Today({
       </div>
       <div className="section-heading">
         <h2>
-          Today’s pages <span className="count">{entries.length}</span>
+          {date === today(settings.timezone)
+            ? "Today’s pages"
+            : "Pages from this day"}{" "}
+          <span className="count">{entries.length}</span>
         </h2>
         <button className="text-button" onClick={() => void newEntry()}>
           <Plus size={15} />
@@ -645,6 +651,7 @@ function DraftStatus({
   draft: {
     status: string;
     error: string;
+    recoveryNotice: string;
     conflict: unknown;
     acceptRemote: () => void;
     keepMine: () => Promise<void>;
@@ -679,6 +686,7 @@ function DraftStatus({
           )}
         </>
       )}
+      {draft.recoveryNotice && <p>{draft.recoveryNotice}</p>}
     </div>
   );
 }
@@ -936,7 +944,7 @@ function EntryWriting({
   async function trash() {
     try {
       await draft.flush();
-      if (localStorage.getItem(api.recoveryPrefix + record.id))
+      if (api.hasRecovery(record.id))
         throw new Error(
           "Save or resolve this draft before moving it to trash.",
         );
@@ -1148,6 +1156,7 @@ function PaperPage({
   records: Snapshot;
   settings: Settings;
 }) {
+  const location = useLocation();
   const { id } = useParams(),
     [params, setParams] = useSearchParams(),
     save = useSave(),
@@ -1169,6 +1178,7 @@ function PaperPage({
       (a) => a.id === params.get("annotation"),
     );
   async function newEntry() {
+    setError("");
     const n =
       ofKind(records, "notebook").find((n) => n.data.icon === "science") ||
       ofKind(records, "notebook")[0];
@@ -1190,6 +1200,7 @@ function PaperPage({
     }
   }
   async function selection(s: Selection, explain: boolean) {
+    setError("");
     let imageAssetId: string | undefined;
     if (s.image) {
       const image = await api.upload(
@@ -1267,6 +1278,7 @@ function PaperPage({
             paper={paper}
             records={records}
             activeAnnotation={annotation}
+            focusKey={location.key}
             onSelect={selection}
           />
         </div>

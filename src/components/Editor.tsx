@@ -72,8 +72,13 @@ class PreviewWidget extends WidgetType {
     const root = this.root;
     queueMicrotask(() => root?.unmount());
   }
-  ignoreEvent() {
-    return false;
+  ignoreEvent(event: Event) {
+    // Keep a source link alive between pointer-down and click. Moving the
+    // CodeMirror cursor first would replace this widget with its Markdown.
+    return (
+      event.target instanceof Element &&
+      !!event.target.closest("a, button, input, select, textarea")
+    );
   }
 }
 export function previewRanges(

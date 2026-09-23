@@ -1,20 +1,68 @@
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Markdown, safeUrl, Plot } from "../src/components/Markdown";
+import {
+  Markdown,
+  safeUrl,
+  Plot,
+  isPlainDiagram,
+} from "../src/components/Markdown";
 describe("safe visual rendering", () => {
+  it("allows scientific arrows in quoted labels while rejecting interactive or HTML diagrams", () => {
+    expect(
+      isPlainDiagram(
+        'flowchart TD\nA["Divide by sqrt(d_k) -> (n_q x n_k)"] --> B["Weights"]',
+      ),
+    ).toBe(true);
+    for (const source of [
+      'flowchart TD\nA["<img src=x>"]',
+      'flowchart TD\nclick A "https://example.com"',
+      '%%{init: {"securityLevel":"loose"}}%%\nflowchart TD',
+      'flowchart TD\nA["javascript:alert(1)"]',
+    ])
+      expect(isPlainDiagram(source)).toBe(false);
+  });
   it("changes image layout through metadata without migrating Markdown prose", () => {
     const NativeURL = URL;
-    vi.stubGlobal("URL", class extends NativeURL {static createObjectURL(){return "blob:proof";} static revokeObjectURL(){}});
+    vi.stubGlobal(
+      "URL",
+      class extends NativeURL {
+        static createObjectURL() {
+          return "blob:proof";
+        }
+        static revokeObjectURL() {}
+      },
+    );
     const client = new QueryClient();
-    client.setQueryData(["asset","proof"], new Blob(["image"]));
-    const text = "![Portrait study](asset:proof)\n\nLight falls across the cheek.";
-    const {container,rerender} = render(<QueryClientProvider client={client}><Markdown text={text}/></QueryClientProvider>);
-    expect(container.querySelector('.asset-image')).not.toHaveStyle({float:'left'});
-    rerender(<QueryClientProvider client={client}><Markdown text={text} imagePresentation={{proof:{alignment:'left',width:40}}}/></QueryClientProvider>);
-    expect(container.querySelector('.asset-image')).toHaveStyle({float:'left',width:'40%'});
-    expect(screen.getByRole('img',{name:'Portrait study'})).toBeInTheDocument();
-    expect(screen.getByText('Light falls across the cheek.')).toBeInTheDocument();
+    client.setQueryData(["asset", "proof"], new Blob(["image"]));
+    const text =
+      "![Portrait study](asset:proof)\n\nLight falls across the cheek.";
+    const { container, rerender } = render(
+      <QueryClientProvider client={client}>
+        <Markdown text={text} />
+      </QueryClientProvider>,
+    );
+    expect(container.querySelector(".asset-image")).not.toHaveStyle({
+      float: "left",
+    });
+    rerender(
+      <QueryClientProvider client={client}>
+        <Markdown
+          text={text}
+          imagePresentation={{ proof: { alignment: "left", width: 40 } }}
+        />
+      </QueryClientProvider>,
+    );
+    expect(container.querySelector(".asset-image")).toHaveStyle({
+      float: "left",
+      width: "40%",
+    });
+    expect(
+      screen.getByRole("img", { name: "Portrait study" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Light falls across the cheek."),
+    ).toBeInTheDocument();
     vi.unstubAllGlobals();
   });
   it("rejects script, data, and arbitrary embedded protocols", () => {

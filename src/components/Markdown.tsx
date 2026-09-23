@@ -10,7 +10,10 @@ import type { Snapshot } from "../domain";
 
 // Presentation is intentionally independent of canonical asset:<id> Markdown.
 // V1 passes no overrides; the art-layout proof exercises this extension point.
-export type ImagePresentation = { alignment: "inline" | "left" | "right"; width: number };
+export type ImagePresentation = {
+  alignment: "inline" | "left" | "right";
+  width: number;
+};
 
 export function safeUrl(url: string) {
   return /^(https?:|mailto:|asset:|annotation:)/i.test(url) ||
@@ -44,7 +47,24 @@ export function AssetImage({
     return () => URL.revokeObjectURL(u);
   }, [query.data]);
   return url ? (
-    <span className="asset-image" style={presentation ? {float: presentation.alignment === "inline" ? "none" : presentation.alignment, width: `${Math.max(10,Math.min(100,presentation.width))}%`, marginInlineEnd: presentation.alignment === "left" ? "1rem" : undefined, marginInlineStart: presentation.alignment === "right" ? "1rem" : undefined} : undefined}>
+    <span
+      className="asset-image"
+      style={
+        presentation
+          ? {
+              float:
+                presentation.alignment === "inline"
+                  ? "none"
+                  : presentation.alignment,
+              width: `${Math.max(10, Math.min(100, presentation.width))}%`,
+              marginInlineEnd:
+                presentation.alignment === "left" ? "1rem" : undefined,
+              marginInlineStart:
+                presentation.alignment === "right" ? "1rem" : undefined,
+            }
+          : undefined
+      }
+    >
       <img src={url} alt={alt || asset?.data.name || "Reference image"} />
       {alt && <span className="image-caption">{alt}</span>}
     </span>
@@ -67,11 +87,7 @@ export function Diagram({ source }: { source: string }) {
     setError("");
     void (async () => {
       try {
-        if (
-          /%%\{|click\s|<|>|javascript:/i.test(
-            source.replace(/-->/g, "").replace(/==>/g, ""),
-          )
-        )
+        if (!isPlainDiagram(source))
           throw new Error(
             "Use a plain diagram without HTML, links, or configuration directives.",
           );
@@ -79,6 +95,7 @@ export function Diagram({ source }: { source: string }) {
         mermaid.initialize({
           startOnLoad: false,
           securityLevel: "strict",
+          flowchart: { htmlLabels: false },
           theme: "neutral",
           suppressErrorRendering: true,
         });
@@ -107,6 +124,12 @@ export function Diagram({ source }: { source: string }) {
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );
+}
+export function isPlainDiagram(source: string) {
+  // A greater-than sign in a quoted scientific label is ordinary text.
+  // Block markup starts, interactive links, and config overrides; Mermaid
+  // still parses the grammar and sanitizes its SVG in strict mode.
+  return !/%%\{|click\s|<|javascript:/i.test(source);
 }
 export function Plot({ source }: { source: string }) {
   try {
@@ -227,7 +250,12 @@ export function Markdown({
             ),
           img: ({ src, alt }) =>
             typeof src === "string" && src.startsWith("asset:") ? (
-              <AssetImage id={src.slice(6)} alt={alt} records={records} presentation={imagePresentation[src.slice(6)]} />
+              <AssetImage
+                id={src.slice(6)}
+                alt={alt}
+                records={records}
+                presentation={imagePresentation[src.slice(6)]}
+              />
             ) : (
               <span className="muted">
                 Upload reference images to keep them private.

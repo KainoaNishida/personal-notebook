@@ -38,8 +38,14 @@ function setup() {
 }
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
   vi.clearAllMocks();
 });
+function drafts() {
+  return Object.keys(localStorage)
+    .filter((key) => key.startsWith("recovery-test:note"))
+    .map((key) => JSON.parse(localStorage.getItem(key)!));
+}
 it("drains edits made during an in-flight save before navigation completes", async () => {
   let resolveFirst!: (value: RecordItem<"entry">) => void;
   vi.mocked(api.save).mockImplementationOnce(
@@ -72,7 +78,7 @@ it("drains edits made during an in-flight save before navigation completes", asy
     title: "Latest",
   });
   expect(vi.mocked(api.save).mock.calls[1][3]).toBe(2);
-  expect(localStorage.getItem("recovery-test:note")).toBeNull();
+  expect(drafts()).toEqual([]);
 });
 it("retains recovery text after a failed server save", async () => {
   vi.mocked(api.save).mockRejectedValue(new Error("Connection interrupted"));
@@ -82,8 +88,35 @@ it("retains recovery text after a failed server save", async () => {
   );
   await act(() => result.current.flush());
   expect(result.current.status).toBe("Not saved");
-  expect(localStorage.getItem("recovery-test:note")).toContain(
-    "Do not lose this",
+  expect(drafts()[0].data.markdown).toBe("Do not lose this");
+});
+it("does not erase another window's newer recovery draft when a save completes", async () => {
+  let finish!: (value: RecordItem<"entry">) => void;
+  vi.mocked(api.save).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve as typeof finish;
+      }),
+  );
+  const { result } = setup();
+  const mine = { ...record.data, title: "Saved window" };
+  act(() => result.current.change(mine));
+  let pending!: Promise<void>;
+  act(() => {
+    pending = result.current.flush();
+  });
+  const other = {
+    revision: 1,
+    data: { ...record.data, title: "Other window unsaved" },
+  };
+  localStorage.setItem("recovery-test:note", JSON.stringify(other));
+  await act(async () => {
+    finish({ ...record, data: mine, revision: 2 });
+    await pending;
+  });
+  expect(result.current.status).toBe("Saved");
+  expect(JSON.parse(localStorage.getItem("recovery-test:note")!)).toEqual(
+    other,
   );
 });
 it("requires conflict resolution when a recovered revision is stale", () => {
@@ -99,4 +132,85 @@ it("requires conflict resolution when a recovered revision is stale", () => {
   expect(result.current.conflict).toEqual(record);
   expect(result.current.error).toContain("Review both");
   expect(api.save).not.toHaveBeenCalled();
+});
+it("recreates the losing draft if recovery storage was cleared during a save", async () => {
+  let fail!: (error: Error) => void;
+  vi.mocked(api.save).mockImplementationOnce(
+    () =>
+      new Promise((_resolve, reject) => {
+        fail = reject;
+      }),
+  );
+  const { result } = setup();
+  act(() => result.current.change({ ...record.data, title: "Losing draft" }));
+  let pending!: Promise<void>;
+  act(() => {
+    pending = result.current.flush();
+  });
+  localStorage.clear();
+  const remote = {
+    ...record,
+    revision: 2,
+    data: { ...record.data, title: "Winning server version" },
+  };
+  await act(async () => {
+    fail(new api.ConflictError(remote));
+    await pending;
+  });
+  expect(result.current.conflict).toEqual(remote);
+  expect(drafts()[0].data.title).toBe("Losing draft");
+});
+it("preserves each losing window through overlapping saves and recovery review", async () => {
+  const first = setup(),
+    second = setup(),
+    winner = setup();
+  const remote = {
+    ...record,
+    revision: 2,
+    data: { ...record.data, title: "Winner" },
+  };
+  vi.mocked(api.save).mockImplementation(async (_kind, _id, data) => {
+    if ((data as typeof record.data).title === "Winner") return remote as never;
+    throw new api.ConflictError(remote);
+  });
+  act(() => {
+    first.result.current.change({
+      ...record.data,
+      title: "First losing version",
+    });
+    second.result.current.change({
+      ...record.data,
+      title: "Second losing version",
+    });
+    winner.result.current.change(remote.data);
+  });
+  expect(drafts()).toHaveLength(3);
+  await act(async () => {
+    await winner.result.current.flush();
+    await Promise.all([
+      first.result.current.flush(),
+      second.result.current.flush(),
+    ]);
+  });
+  expect(
+    drafts()
+      .map((d) => d.data.title)
+      .sort(),
+  ).toEqual(["First losing version", "Second losing version"]);
+  first.unmount();
+  second.unmount();
+  winner.unmount();
+  const recovered = setup();
+  expect(recovered.result.current.status).toBe("Review recovered draft");
+  const chosen = recovered.result.current.value.title;
+  act(() => recovered.result.current.acceptRemote());
+  expect(drafts()).toHaveLength(1);
+  expect(drafts()[0].data.title).not.toBe(chosen);
+  expect(recovered.result.current.recoveryNotice).toContain(
+    "Other unsaved versions",
+  );
+  recovered.unmount();
+  const remaining = setup();
+  expect(remaining.result.current.status).toBe("Review recovered draft");
+  expect(remaining.result.current.value.title).not.toBe(chosen);
 });

@@ -1,15 +1,21 @@
 import { test, expect } from "@playwright/test";
 
-function pdf() {
+function pdf(twoPages = false) {
   const stream =
     "BT /F1 18 Tf 50 730 Td (A synthetic research paper) Tj 0 -35 Td (Attention combines queries and keys.) Tj ET";
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    twoPages
+      ? "<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>"
+      : "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
     `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
   ];
+  if (twoPages)
+    objects.push(
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    );
   let text = "%PDF-1.4\n";
   const offsets = [0];
   objects.forEach((o, i) => {
@@ -17,10 +23,12 @@ function pdf() {
     text += `${i + 1} 0 obj\n${o}\nendobj\n`;
   });
   const start = Buffer.byteLength(text);
-  text += `xref\n0 6\n0000000000 65535 f \n${offsets
+  text += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets
     .slice(1)
     .map((o) => String(o).padStart(10, "0") + " 00000 n \n")
-    .join("")}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${start}\n%%EOF`;
+    .join(
+      "",
+    )}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${start}\n%%EOF`;
   return Buffer.from(text);
 }
 
@@ -60,13 +68,11 @@ test("PDF regions survive zoom and reload; AI only opens on request", async ({
   page,
 }) => {
   await page.goto("/papers");
-  await page
-    .locator("input[type=file]")
-    .setInputFiles({
-      name: "synthetic-paper.pdf",
-      mimeType: "application/pdf",
-      buffer: pdf(),
-    });
+  await page.locator("input[type=file]").setInputFiles({
+    name: "synthetic-paper.pdf",
+    mimeType: "application/pdf",
+    buffer: pdf(true),
+  });
   await page.getByRole("button", { name: "New dated entry" }).click();
   await expect(page.locator(".textLayer")).toContainText("Attention combines");
   await page.getByRole("button", { name: "Select PDF region" }).click();
@@ -78,6 +84,24 @@ test("PDF regions survive zoom and reload; AI only opens on request", async ({
   await page.getByRole("button", { name: "Link to notes" }).click();
   await expect(page.locator(".highlight")).toHaveCount(1);
   await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  // Autosave reorders the query cache, then a server refresh replaces object
+  // references. Neither event should navigate back to an old source link.
+  await page.getByRole("spinbutton", { name: "PDF page" }).fill("2");
+  await page
+    .getByRole("textbox", { name: "Entry title" })
+    .fill("Reading on page two");
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  const other = await page.context().newPage();
+  await other.goto("/");
+  await page.bringToFront();
+  await expect(page.getByRole("spinbutton", { name: "PDF page" })).toHaveValue(
+    "2",
+  );
+  await other.close();
+  await page.getByRole("button", { name: /Figure or equation · p. 1/ }).click();
+  await expect(page.getByRole("spinbutton", { name: "PDF page" })).toHaveValue(
+    "1",
+  );
   await page.getByRole("button", { name: "Zoom in", exact: true }).click();
   await expect(page.locator(".highlight")).toHaveCount(1);
   await page.reload();
@@ -109,7 +133,9 @@ test("image, diagram, undo, search and trash recovery", async ({ page }) => {
   await page.getByRole("button", { name: "Edit Markdown source" }).click();
   await page
     .locator(".cm-content")
-    .fill("```mermaid\nflowchart LR\n  Q[Queries] --> S[Scores]\n```\n\n");
+    .fill(
+      '```mermaid\nflowchart LR\n  Q["Queries"] --> S["Divide by sqrt(d_k) -> Scores"]\n```\n\n',
+    );
   await page.getByRole("button", { name: "Use live preview" }).click();
   await expect(page.locator(".diagram svg")).toBeVisible();
   const png = Buffer.from(
@@ -181,6 +207,13 @@ test("concurrent edits show recoverable conflict instead of overwriting", async 
     .getByRole("textbox", { name: "Entry title" })
     .fill("Second window");
   await expect(other.getByText("Not saved", { exact: true })).toBeVisible();
+  await other.reload();
+  await expect(
+    other.getByText("Review recovered draft", { exact: true }),
+  ).toBeVisible();
+  await expect(other.getByRole("textbox", { name: "Entry title" })).toHaveValue(
+    "Second window",
+  );
   await other.getByText("Review the saved version", { exact: true }).click();
   await expect(other.locator(".conflict-preview")).toContainText(
     "First window",

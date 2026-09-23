@@ -3,6 +3,62 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "./service";
 import type { AnyRecord, DataMap, Kind, RecordItem, Snapshot } from "./domain";
 
+function clearMatchingDraft(id: string, data: unknown) {
+  for (const key of recoveryKeys(id)) {
+    try {
+      if (
+        JSON.stringify(JSON.parse(localStorage.getItem(key)!).data) ===
+        JSON.stringify(data)
+      )
+        localStorage.removeItem(key);
+    } catch {
+      // Keep unreadable recovery data available until the owner replaces it.
+    }
+  }
+}
+
+function recoveryKeys(id: string) {
+  const base = api.recoveryPrefix + id;
+  return Object.keys(localStorage).filter(
+    (key) => key === base || key.startsWith(base + ":"),
+  );
+}
+
+function readRecovery<K extends "entry" | "day">(record: RecordItem<K>) {
+  try {
+    const preferred = sessionStorage.getItem(api.recoveryPrefix + record.id);
+    const drafts = recoveryKeys(record.id)
+      .map((key) => {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(key)!);
+          if (
+            !parsed.data ||
+            typeof parsed.data.markdown !== "string" ||
+            !Number.isInteger(parsed.revision)
+          )
+            return null;
+          return {
+            key,
+            data: parsed.data as DataMap[K],
+            revision: parsed.revision as number,
+            updatedAt: Number(parsed.updatedAt) || 0,
+          };
+        } catch {
+          return null;
+        }
+      })
+      .filter((draft) => draft !== null);
+    drafts.sort(
+      (a, b) =>
+        Number(b.key === preferred) - Number(a.key === preferred) ||
+        b.updatedAt - a.updatedAt,
+    );
+    return drafts[0] || null;
+  } catch {
+    return null;
+  }
+}
+
 export function useRecords() {
   return useQuery({
     queryKey: ["records"],
@@ -33,17 +89,40 @@ export function useSave() {
 }
 export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
   const save = useSave(),
-    [value, setValue] = useState<DataMap[K]>(() => {
-      const draft = localStorage.getItem(api.recoveryPrefix + record.id);
-      try {
-        return draft ? JSON.parse(draft).data : record.data;
-      } catch {
-        return record.data;
-      }
-    });
+    [recovery] = useState(() => ({
+      key: api.recoveryPrefix + record.id + ":" + crypto.randomUUID(),
+      draft: readRecovery(record),
+    })),
+    [value, setValue] = useState<DataMap[K]>(
+      () => recovery.draft?.data || record.data,
+    );
   const [status, setStatus] = useState("Saved"),
     [conflict, setConflict] = useState<AnyRecord | null>(null),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [recoveryNotice, setRecoveryNotice] = useState("");
+  const persist = useCallback(
+    (data: DataMap[K], revision: number) => {
+      localStorage.setItem(
+        recovery.key,
+        JSON.stringify({ data, revision, updatedAt: Date.now() }),
+      );
+      // Remember this window's slot across reloads; localStorage slots are unique
+      // to editor instances so other windows never overwrite its unsaved text.
+      try {
+        sessionStorage.setItem(api.recoveryPrefix + record.id, recovery.key);
+      } catch {
+        /* Other drafts remain discoverable by timestamp. */
+      }
+    },
+    [recovery.key, record.id],
+  );
+  const remainingRecovery = useCallback(() => {
+    setRecoveryNotice(
+      recoveryKeys(record.id).length
+        ? "Other unsaved versions remain in this browser. Reopen this note to review them."
+        : "",
+    );
+  }, [record.id]);
   const latest = useRef({
       value,
       record,
@@ -73,18 +152,30 @@ export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
         );
         s.record = saved;
         s.dirty = s.value !== data;
-        if (!s.dirty) localStorage.removeItem(api.recoveryPrefix + record.id);
+        if (!s.dirty) clearMatchingDraft(record.id, data);
         if (mounted.current) {
           setStatus(s.dirty ? "Unsaved" : "Saved");
           setError("");
+          if (!s.dirty) remainingRecovery();
         }
       } catch (e) {
+        let recoveryFailed = false;
+        try {
+          persist(s.value, s.record.revision);
+        } catch {
+          recoveryFailed = true;
+        }
         if (e instanceof api.ConflictError) {
           s.conflict = true;
           if (mounted.current) setConflict(e.remote);
         }
         if (mounted.current) {
-          setError((e as Error).message);
+          setError(
+            (e as Error).message +
+              (recoveryFailed
+                ? " Recovery storage is unavailable; keep this tab open and copy your text before closing it."
+                : ""),
+          );
           setStatus("Not saved");
         }
       } finally {
@@ -94,29 +185,23 @@ export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
     await pending.current;
     pending.current = null;
     if (s.dirty && s.value !== data && !s.conflict) await flush();
-  }, [save, record.id]);
+  }, [save, record.id, persist, remainingRecovery]);
   useEffect(() => {
     mounted.current = true;
-    const draft = localStorage.getItem(api.recoveryPrefix + record.id);
+    const draft = recovery.draft;
     if (draft) {
-      latest.current.dirty = true;
-      let parsed;
-      try {
-        parsed = JSON.parse(draft);
-      } catch {
-        latest.current.dirty = false;
-        setError(
-          "The recovery draft is unreadable. The saved note is still available.",
-        );
-      }
-      if (parsed && parsed.revision !== record.revision) {
+      if (JSON.stringify(draft.data) === JSON.stringify(record.data)) {
+        clearMatchingDraft(record.id, draft.data);
+        remainingRecovery();
+      } else {
+        latest.current.dirty = true;
         latest.current.conflict = true;
         setConflict(record as AnyRecord);
         setStatus("Review recovered draft");
         setError(
           "A recovered draft differs from the saved version. Review both before continuing.",
         );
-      } else if (parsed) setStatus("Recovered draft");
+      }
     }
     const t = setInterval(() => {
       void flush();
@@ -134,7 +219,7 @@ export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
       window.removeEventListener("beforeunload", before);
       void flush();
     };
-  }, [record.id, flush]);
+  }, [record.id, flush, recovery, remainingRecovery]);
   useEffect(() => {
     const s = latest.current;
     if (!s.dirty && !s.saving && record.revision > s.record.revision) {
@@ -149,10 +234,7 @@ export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
     setValue(data);
     setStatus("Unsaved");
     try {
-      localStorage.setItem(
-        api.recoveryPrefix + record.id,
-        JSON.stringify({ data, revision: latest.current.record.revision }),
-      );
+      persist(data, latest.current.record.revision);
     } catch {
       setError(
         "Browser recovery storage is full or unavailable. Keep this page open until the server save succeeds.",
@@ -161,6 +243,7 @@ export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
   };
   const acceptRemote = () => {
     if (!conflict) return;
+    clearMatchingDraft(record.id, latest.current.value);
     const r = conflict as RecordItem<K>;
     latest.current = {
       value: r.data,
@@ -173,7 +256,7 @@ export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
     setConflict(null);
     setError("");
     setStatus("Saved");
-    localStorage.removeItem(api.recoveryPrefix + record.id);
+    remainingRecovery();
   };
   const keepMine = async () => {
     if (!conflict) return;
@@ -187,6 +270,7 @@ export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
     change,
     status,
     error,
+    recoveryNotice,
     conflict,
     acceptRemote,
     keepMine,
