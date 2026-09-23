@@ -6,6 +6,7 @@ import {
   Link,
   Route,
   Routes,
+  Navigate,
   useNavigate,
   useParams,
   useSearchParams,
@@ -28,7 +29,6 @@ import {
   BookOpen,
   CalendarDays,
   Files,
-  History,
   Settings as SettingsIcon,
   LogOut,
   Check,
@@ -41,13 +41,13 @@ import {
   Download,
   Upload,
   Trash2,
-  Sprout,
   Sparkles,
   Link2,
 } from "lucide-react";
 import {
   ofKind,
   uid,
+  entryId,
   today,
   displayDate,
   shiftDate,
@@ -62,6 +62,12 @@ import type {
 } from "./domain";
 import * as api from "./service";
 import { useRecords, useSave, useDraft } from "./hooks";
+import { DraftStatus } from "./components/DraftStatus";
+import { DailyEntry } from "./components/DailyEntry";
+import { Splitter } from "./components/Splitter";
+import { PaperTitle } from "./components/PaperTitle";
+import { NoteVersions } from "./components/NoteVersions";
+import { themeTokens } from "./theme";
 import { AuthGate } from "./components/AuthGate";
 import type { EditorHandle } from "./components/Editor";
 import { Empty, ErrorNotice, Modal, SubjectIcon } from "./components/UI";
@@ -97,6 +103,7 @@ export default function App() {
   );
 }
 function Workspace() {
+  const route = useLocation();
   const q = useRecords(),
     save = useSave(),
     [error, setError] = useState(""),
@@ -113,7 +120,24 @@ function Workspace() {
     .sort((a, b) => a.data.order - b.data.order);
   useEffect(() => {
     document.documentElement.dataset.theme = settings.theme;
-  }, [settings.theme]);
+    const style = document.documentElement.style;
+    const tokens = themeTokens(settings);
+    for (const key of [
+      "--bg",
+      "--text",
+      "--muted",
+      "--sidebar",
+      "--surface",
+      "--surface2",
+      "--border",
+      "--rhythm-empty",
+      "--accent",
+      "--accent-text",
+    ]) {
+      if (tokens[key]) style.setProperty(key, tokens[key]);
+      else style.removeProperty(key);
+    }
+  }, [settings.theme, settings.mainColor, settings.accentColor]);
   useEffect(() => {
     if (q.data && !ofKind(q.data, "notebook").length)
       void api
@@ -136,19 +160,15 @@ function Workspace() {
   return (
     <div className={`app-shell ${collapsed ? "collapsed" : ""}`}>
       <aside className="app-sidebar">
-        <Link to="/" className="brand" aria-label="Commonplace home">
+        <Link to="/" className="brand" aria-label="Kai’s Journal home">
           <BookOpen size={23} />
-          <span>
-            commonplace<span className="brand-dot">.</span>
-          </span>
+          <span>Kai’s Journal</span>
         </Link>
-        <div className="space-label">YOUR PERSONAL SPACE</div>
+
         <nav>
           {[
             [CalendarDays, "Today", "/"],
             [BookOpen, "Notebooks", "/notebooks"],
-            [Files, "Papers", "/papers"],
-            [History, "History", "/history"],
           ].map(([Icon, label, path]) => {
             const I = Icon as typeof CalendarDays;
             return (
@@ -182,10 +202,6 @@ function Workspace() {
           ))}
         </div>
         <div className="sidebar-bottom">
-          <div className="private-label">
-            <span className="status-dot" />{" "}
-            {api.demo ? "Local design preview" : "Private · just for you"}
-          </div>
           <NavLink to="/settings" aria-label="Settings">
             <SettingsIcon size={17} />
             <span>Settings</span>
@@ -197,7 +213,7 @@ function Workspace() {
           >
             <span className="avatar">K</span>
             <span>
-              Your commonplace
+              Kai’s Journal
               <small>{api.demo ? "Sample workspace" : "Owner account"}</small>
             </span>
             <LogOut size={16} />
@@ -214,14 +230,13 @@ function Workspace() {
             >
               <PanelLeft size={18} />
             </button>
-            <span className="topbar-label">A little, every day.</span>
           </div>
           <div className="row">
             <label className="search">
               <Search size={16} />
               <input
                 aria-label="Search entries"
-                placeholder="Find a thought…"
+                placeholder="Search notes…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -256,11 +271,11 @@ function Workspace() {
         )}
         <ErrorNotice error={error || q.error} />
         {q.isPending ? (
-          <div className="loading-screen">Gathering your notes…</div>
+          <div className="loading-screen">Loading notes…</div>
         ) : search ? (
           <div className="page">
             <p className="eyebrow">SEARCH YOUR NOTEBOOKS</p>
-            <h1>Finding a thought.</h1>
+            <h1>Search results</h1>
             <EntryList
               records={records}
               entries={ofKind(records, "entry").filter((e) =>
@@ -279,33 +294,43 @@ function Workspace() {
                 <Today key="today" records={records} settings={settings} />
               }
             />
-            <Route
-              path="/history"
-              element={
-                <Today
-                  key="history"
-                  records={records}
-                  settings={settings}
-                  history
-                />
-              }
-            />
+            <Route path="/history" element={<Navigate to="/" replace />} />
             <Route
               path="/notebooks"
               element={<Notebooks records={records} />}
             />
             <Route
               path="/notebooks/:id"
-              element={<NotebookPage records={records} settings={settings} />}
+              element={
+                <NotebookPage
+                  key={route.pathname}
+                  records={records}
+                  settings={settings}
+                />
+              }
             />
             <Route
               path="/entries/:id"
               element={<EntryPage records={records} />}
             />
-            <Route path="/papers" element={<Papers records={records} />} />
+            <Route
+              path="/papers"
+              element={
+                <Navigate
+                  to={`/notebooks/${ns.find((n) => n.data.icon === "science")?.id || ""}`}
+                  replace
+                />
+              }
+            />
             <Route
               path="/papers/:id"
-              element={<PaperPage records={records} settings={settings} />}
+              element={
+                <PaperPage
+                  key={route.pathname}
+                  records={records}
+                  settings={settings}
+                />
+              }
             />
             <Route
               path="/settings"
@@ -314,7 +339,7 @@ function Workspace() {
             <Route
               path="*"
               element={
-                <Empty title="This page wandered off.">
+                <Empty title="Page not found.">
                   <Link to="/">Return to Today</Link>
                 </Empty>
               }
@@ -357,12 +382,12 @@ function EntryList({
                 <SubjectIcon name={n?.data.icon} />
               </span>
               <div>
-                <h3>{e.data.title || "Untitled thought"}</h3>
+                <h3>{e.data.title || "Untitled note"}</h3>
                 <p>
                   {e.data.markdown
                     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
                     .replace(/[#*>`\[\]]/g, "")
-                    .slice(0, 105) || "A fresh page, ready when you are."}
+                    .slice(0, 105) || "Empty note"}
                 </p>
                 <span className="small muted">
                   {n?.data.name} <span className="sep">·</span>{" "}
@@ -375,35 +400,31 @@ function EntryList({
         })}
     </div>
   ) : (
-    <Empty title="Room for your next thought.">
-      Create an entry in any notebook to begin.
-    </Empty>
+    <Empty title="No entries yet.">Open a notebook to write.</Empty>
   );
 }
 function Today({
   records,
   settings,
-  history = false,
 }: {
   records: Snapshot;
   settings: Settings;
-  history?: boolean;
 }) {
   const [date, setDate] = useState(today(settings.timezone)),
     save = useSave(),
-    [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
+    [error, setError] = useState("");
   const ns = ofKind(records, "notebook")
       .filter((n) => !n.data.archived)
       .sort((a, b) => a.data.order - b.data.order),
     entries = ofKind(records, "entry").filter((e) => e.data.date === date),
-    day = ofKind(records, "day").find((d) => d.data.date === date),
+    life =
+      ns.find((n) => n.id === settings.lifeNotebookId) ||
+      ns.find((n) => n.data.name.toLowerCase() === "life"),
     activities = ofKind(records, "activity");
   const complete = activities.filter(
     (a) => a.data.date === date && a.data.completed,
   ).length;
   const days = Array.from({ length: 14 }, (_, i) => shiftDate(date, i - 13));
-  const nav = useNavigate();
   async function toggle(n: RecordItem<"notebook">) {
     const old = activities.find(
       (a) => a.data.date === date && a.data.notebookId === n.id,
@@ -415,30 +436,6 @@ function Today({
         { date, notebookId: n.id, completed: !old?.data.completed },
         old?.revision || 0,
       );
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-  async function reflect() {
-    setBusy(true);
-    try {
-      await save("day", uid(), { date, markdown: "" });
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function newEntry() {
-    if (!ns.length) return;
-    try {
-      const e = await save("entry", uid(), {
-        notebookId: ns[0].id,
-        date,
-        title: "",
-        markdown: "",
-      });
-      nav(`/entries/${e.id}`);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -477,26 +474,12 @@ function Today({
           </button>
         </div>
       </div>
-      <div className="hero row between">
-        <div>
-          <h1>
-            {history ? "A record of small things." : "Make room for curiosity."}
-          </h1>
-          <p className="lede">
-            No perfect days. Just a place to notice what matters.
-          </p>
-        </div>
-        <div className="hero-symbol" aria-hidden="true">
-          <Sprout size={64} strokeWidth={0.65} />
-          <span>GROW AT YOUR OWN PACE</span>
-        </div>
-      </div>
+      <h1>Today</h1>
       <ErrorNotice error={error} />
       <div className="section-heading">
-        <h2>A little of what you love</h2>
+        <h2>Goals</h2>
         <span className="small muted">
-          {complete} of {ns.length} explored <span className="sep">/</span> no
-          pressure
+          {complete} of {ns.length} completed
         </span>
       </div>
       <div className="goal-grid">
@@ -527,10 +510,9 @@ function Today({
               </div>
               <Link to={`/notebooks/${n.id}`}>
                 <h3>{n.data.name}</h3>
-                <p>{n.data.description}</p>
               </Link>
               <span className="goal-status">
-                {checked ? "A little progress today" : "Whenever you’re ready"}
+                {checked ? "Completed" : "Not marked complete"}
               </span>
             </div>
           );
@@ -539,34 +521,25 @@ function Today({
       <div className="today-columns">
         <section>
           <div className="section-heading">
-            <h2>Pause & reflect</h2>
-            <span className="eyebrow">JUST FOR YOU</span>
+            <h2>Reflection</h2>
           </div>
           <div className="reflection-card">
-            {day ? (
-              <Reflection key={day.id} record={day} records={records} />
+            {life ? (
+              <DailyEntry
+                key={`${life.id}:${date}`}
+                records={records}
+                notebook={life}
+                date={date}
+                compact
+              />
             ) : (
-              <>
-                <p className="reflection-prompt">What stayed with you today?</p>
-                <p className="muted">
-                  A small win. A question you’re sitting with.
-                  <br />
-                  Something worth remembering.
-                </p>
-                <button
-                  className="text-button"
-                  disabled={busy}
-                  onClick={() => void reflect()}
-                >
-                  Start a reflection <ArrowUpRight size={15} />
-                </button>
-              </>
+              <p>Open Notebooks to add a Life notebook.</p>
             )}
           </div>
         </section>
         <section className="rhythm">
           <div className="section-heading">
-            <h2>Your recent rhythm</h2>
+            <h2>Activity</h2>
             <span className="small muted">14 days</span>
           </div>
           <div className="rhythm-card">
@@ -588,7 +561,7 @@ function Today({
                       title={`${n.data.name}, ${displayDate(d)}: ${yes ? "completed" : "not marked"}`}
                       aria-label={`${n.data.name}, ${d}: ${yes ? "completed" : "not marked"}`}
                       className={yes ? "rhythm-cell filled" : "rhythm-cell"}
-                      style={yes ? { background: n.data.color } : undefined}
+                      style={yes ? { background: "var(--accent)" } : undefined}
                       onClick={() => setDate(d)}
                     />
                   );
@@ -599,9 +572,6 @@ function Today({
               <span>{displayDate(days[0])}</span>
               <span>{displayDate(date)}</span>
             </div>
-            <p className="small muted">
-              Every little square is time made for yourself.
-            </p>
           </div>
         </section>
       </div>
@@ -612,82 +582,9 @@ function Today({
             : "Pages from this day"}{" "}
           <span className="count">{entries.length}</span>
         </h2>
-        <button className="text-button" onClick={() => void newEntry()}>
-          <Plus size={15} />
-          New entry
-        </button>
       </div>
       <EntryList records={records} entries={entries} />
-      <footer className="page-footer">
-        COLLECT MOMENTS. CONNECT IDEAS. COME BACK TOMORROW.
-      </footer>
     </main>
-  );
-}
-function Reflection({
-  record,
-  records,
-}: {
-  record: RecordItem<"day">;
-  records: Snapshot;
-}) {
-  const d = useDraft(record);
-  return (
-    <>
-      <Editor
-        compact
-        label="Daily reflection"
-        records={records}
-        value={d.value.markdown}
-        onChange={(markdown) => d.change({ ...d.value, markdown })}
-      />
-      <DraftStatus draft={d} />
-    </>
-  );
-}
-function DraftStatus({
-  draft,
-}: {
-  draft: {
-    status: string;
-    error: string;
-    recoveryNotice: string;
-    conflict: unknown;
-    acceptRemote: () => void;
-    keepMine: () => Promise<void>;
-    flush: () => Promise<void>;
-  };
-}) {
-  return (
-    <div className="draft-status">
-      <span className={draft.error ? "error-text" : "muted"}>
-        {draft.status}
-      </span>
-      {draft.error && (
-        <>
-          <p>{draft.error}</p>
-          {draft.conflict ? (
-            <div>
-              <details>
-                <summary>Review the saved version</summary>
-                <pre className="conflict-preview">
-                  {JSON.stringify((draft.conflict as AnyRecord).data, null, 2)}
-                </pre>
-              </details>
-              <div className="row">
-                <button onClick={draft.acceptRemote}>Use saved version</button>
-                <button onClick={() => void draft.keepMine()}>
-                  Save my recovered version
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button onClick={() => void draft.flush()}>Retry save</button>
-          )}
-        </>
-      )}
-      {draft.recoveryNotice && <p>{draft.recoveryNotice}</p>}
-    </div>
   );
 }
 function Notebooks({ records }: { records: Snapshot }) {
@@ -714,7 +611,7 @@ function Notebooks({ records }: { records: Snapshot }) {
         editing?.id || uid(),
         {
           ...(editing?.data || {
-            color: "#b7cba3",
+            color: "#f59a56",
             icon: "reading",
             order: ns.length,
             archived: false,
@@ -745,15 +642,14 @@ function Notebooks({ records }: { records: Snapshot }) {
   }
   return (
     <main className="page">
-      <div className="eyebrow">A PLACE FOR EVERY PART OF YOU</div>
       <div className="row between">
-        <h1>Your notebooks.</h1>
+        <h1>Notebooks</h1>
         <button className="primary" onClick={() => edit()}>
           <Plus size={16} />
           New notebook
         </button>
       </div>
-      <p className="lede">Different interests. One ongoing story.</p>
+
       <ErrorNotice error={error} />
       <div className="notebook-grid">
         {ns.map((n) => (
@@ -766,13 +662,19 @@ function Notebooks({ records }: { records: Snapshot }) {
               <div className="notebook-cover">
                 <SubjectIcon name={n.data.icon} size={35} />
                 <span className="eyebrow">
-                  {n.data.archived ? "ARCHIVED" : "PERSONAL NOTEBOOK"}
+                  {n.data.archived ? "ARCHIVED" : "NOTEBOOK"}
                 </span>
                 <h2>{n.data.name}</h2>
               </div>
             </Link>
             <div className="notebook-info">
-              <p>{n.data.description}</p>
+              {![
+                "Follow an idea all the way through.",
+                "Understand how the pieces fit.",
+                "Look a little closer.",
+                "Good sentences. New perspectives.",
+                "Make space to move.",
+              ].includes(n.data.description) && <p>{n.data.description}</p>}
               <span className="small muted">
                 {
                   ofKind(records, "entry").filter(
@@ -819,7 +721,7 @@ function Notebooks({ records }: { records: Snapshot }) {
         open={open}
         onOpenChange={setOpen}
         title={editing ? "Edit notebook" : "A new notebook"}
-        description="Make a little room for another interest."
+        description="Name and describe this notebook."
       >
         <form onSubmit={submit}>
           <label className="field">
@@ -854,64 +756,66 @@ function NotebookPage({
   records: Snapshot;
   settings: Settings;
 }) {
-  const { id } = useParams(),
-    n = ofKind(records, "notebook").find((n) => n.id === id),
-    save = useSave(),
-    nav = useNavigate(),
-    [error, setError] = useState("");
-  if (!n)
+  const { id } = useParams();
+  const notebook = ofKind(records, "notebook").find((n) => n.id === id);
+  const [date, setDate] = useState(today(settings.timezone));
+  if (!notebook)
     return (
-      <Empty title="Notebook not found.">
-        <Link to="/notebooks">All notebooks</Link>
+      <Empty title="Notebook not found">
+        <Link to="/notebooks">Notebooks</Link>
       </Empty>
     );
-  async function create() {
-    try {
-      const e = await save("entry", uid(), {
-        title: "",
-        markdown: "",
-        notebookId: id!,
-        date: today(settings.timezone),
-      });
-      nav(`/entries/${e.id}`);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
+  if (notebook.data.icon === "science") return <Papers records={records} />;
+  const entries = ofKind(records, "entry").filter(
+    (e) => e.data.notebookId === id && !e.data.paperId,
+  );
   return (
-    <main className="page">
+    <main className="page writing-page">
       <Link className="back-link" to="/notebooks">
         <ArrowLeft size={14} />
         Notebooks
       </Link>
       <div className="row between">
-        <div>
-          <span className="subject-label" style={{ color: n.data.color }}>
-            <SubjectIcon name={n.data.icon} />
-            YOUR {n.data.name.toUpperCase()} NOTEBOOK
-          </span>
-          <h1>{n.data.name}.</h1>
-          <p className="lede">{n.data.description}</p>
-        </div>
-        <button className="primary" onClick={() => void create()}>
-          <Plus size={16} />
-          New entry
-        </button>
+        <h1>{notebook.data.name}</h1>
+        <label className="field">
+          View day
+          <input
+            type="date"
+            aria-label="View notebook day"
+            max={today(settings.timezone)}
+            value={date}
+            onChange={(e) => e.target.value && setDate(e.target.value)}
+          />
+        </label>
       </div>
-      <ErrorNotice error={error} />
-      <EntryList
+      <DailyEntry
+        key={`${id}:${date}`}
         records={records}
-        entries={ofKind(records, "entry").filter(
-          (e) => e.data.notebookId === id,
-        )}
+        notebook={notebook}
+        date={date}
       />
+      <details className="previous-entries">
+        <summary>
+          Previous entries ({entries.filter((e) => e.data.date !== date).length}
+          )
+        </summary>
+        <EntryList
+          records={records}
+          entries={entries.filter((e) => e.data.date !== date)}
+        />
+      </details>
     </main>
   );
 }
 function EntryPage({ records }: { records: Snapshot }) {
   const { id } = useParams(),
-    record = ofKind(records, "entry").find((e) => e.id === id);
-  return record ? (
+    record = records.find((e) => e.kind === "entry" && e.id === id) as
+      RecordItem<"entry"> | undefined;
+  if (record?.data.mergedInto)
+    return <Navigate to={`/entries/${record.data.mergedInto}`} replace />;
+  if (record?.data.paperId)
+    return <Navigate to={`/papers/${record.data.paperId}`} replace />;
+  return record && !record.deleted_at ? (
     <main className="page writing-page">
       <EntryWriting key={record.id} record={record} records={records} />
     </main>
@@ -919,7 +823,7 @@ function EntryPage({ records }: { records: Snapshot }) {
     <Empty title="Entry not found.">It may be in Trash in Settings.</Empty>
   );
 }
-function EntryWriting({
+export function EntryWriting({
   record,
   records,
   editorRef,
@@ -965,44 +869,45 @@ function EntryWriting({
   }
   return (
     <div className="entry-writing">
-      <div className="row between entry-breadcrumb">
-        <Link
-          to={`/notebooks/${record.data.notebookId}`}
-          className="subject-label"
-          style={{ color: n?.data.color }}
-        >
-          <SubjectIcon name={n?.data.icon} size={15} />
-          {n?.data.name || "Notebook"}
-        </Link>
-        <div className="row">
-          <input
-            className="date-inline"
-            type="date"
-            aria-label="Entry date"
-            value={draft.value.date}
-            onChange={(e) =>
-              e.target.value &&
-              draft.change({ ...draft.value, date: e.target.value })
-            }
-          />
-          <button
-            className="icon-button"
-            aria-label="Move entry to trash"
-            onClick={() => void trash()}
+      {!record.data.paperId && (
+        <div className="row between entry-breadcrumb">
+          <Link
+            to={`/notebooks/${record.data.notebookId}`}
+            className="subject-label"
+            style={{ color: n?.data.color }}
           >
-            <Trash2 size={15} />
-          </button>
+            <SubjectIcon name={n?.data.icon} size={15} />
+            {n?.data.name || "Notebook"}
+          </Link>
+          <div className="row">
+            <span className="small muted">
+              {displayDate(draft.value.date, {
+                month: "long",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </span>
+            <button
+              className="icon-button"
+              aria-label="Move entry to trash"
+              onClick={() => void trash()}
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
         </div>
-      </div>
-      <input
-        className="entry-title"
-        aria-label="Entry title"
-        placeholder="An untitled thought"
-        value={draft.value.title}
-        onChange={(e) =>
-          draft.change({ ...draft.value, title: e.target.value })
-        }
-      />
+      )}
+      {!record.data.paperId && (
+        <input
+          className="entry-title"
+          aria-label="Entry title"
+          placeholder="Title (optional)"
+          value={draft.value.title}
+          onChange={(e) =>
+            draft.change({ ...draft.value, title: e.target.value })
+          }
+        />
+      )}
       <Editor
         ref={editorRef}
         records={records}
@@ -1022,6 +927,13 @@ function EntryWriting({
           words · Markdown
         </span>
       </div>
+      {record.revision > 0 && (
+        <NoteVersions
+          record={record}
+          records={records}
+          onRestore={(markdown) => draft.change({ ...draft.value, markdown })}
+        />
+      )}
       <ErrorNotice error={error} />
     </div>
   );
@@ -1072,9 +984,8 @@ function Papers({ records }: { records: Snapshot }) {
   }
   return (
     <main className="page">
-      <div className="eyebrow">READ SLOWLY. FOLLOW THE THREAD.</div>
       <div className="row between">
-        <h1>Your paper trail.</h1>
+        <h1>Research papers</h1>
         <button
           className="primary"
           disabled={busy}
@@ -1084,9 +995,7 @@ function Papers({ records }: { records: Snapshot }) {
           {busy ? "Opening paper…" : "Add a paper"}
         </button>
       </div>
-      <p className="lede">
-        The source on one side. Your understanding on the other.
-      </p>
+
       <input
         ref={input}
         type="file"
@@ -1119,7 +1028,7 @@ function Papers({ records }: { records: Snapshot }) {
                     (e) => e.data.paperId === p.id,
                   ).length
                 }{" "}
-                dated entries
+                notes
               </p>
             </div>
             <ArrowUpRight size={18} />
@@ -1136,7 +1045,7 @@ function Papers({ records }: { records: Snapshot }) {
           }}
         >
           <Files size={36} strokeWidth={1} />
-          <h2>A paper worth thinking about.</h2>
+          <h2>Add a PDF</h2>
           <p className="muted">
             Drop a PDF here, or choose one from your computer.
           </p>
@@ -1166,9 +1075,10 @@ function PaperPage({
       context: string;
     }>(),
     [error, setError] = useState(""),
-    [split, setSplit] = useState(50),
-    [pane, setPane] = useState("both"),
-    [busy, setBusy] = useState(false);
+    [split, setSplit] = useState(
+      () => Number(localStorage.getItem("kais-journal:split")) || 50,
+    ),
+    [pane, setPane] = useState("both");
   const paper = ofKind(records, "paper").find((p) => p.id === id),
     entries = ofKind(records, "entry")
       .filter((e) => e.data.paperId === id)
@@ -1177,28 +1087,37 @@ function PaperPage({
     annotation = ofKind(records, "annotation").find(
       (a) => a.id === params.get("annotation"),
     );
-  async function newEntry() {
-    setError("");
-    const n =
-      ofKind(records, "notebook").find((n) => n.data.icon === "science") ||
-      ofKind(records, "notebook")[0];
-    if (!n) return;
-    setBusy(true);
-    try {
-      const e = await save("entry", uid(), {
-        paperId: id,
-        notebookId: n.id,
-        date: today(settings.timezone),
-        title: paper?.data.title || "",
-        markdown: "",
-      });
-      setParams({ entry: e.id });
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
+  const notebook = ofKind(records, "notebook").find(
+    (n) => n.data.icon === "science",
+  );
+  const [blankId, setBlankId] = useState("");
+  useEffect(() => {
+    let active = true;
+    void entryId(`paper:${id}`).then((next) => {
+      if (active) setBlankId(next);
+    });
+    return () => {
+      active = false;
+    };
+  }, [id]);
+  const blank: RecordItem<"entry"> | undefined =
+    notebook && paper && blankId
+      ? {
+          id: blankId,
+          kind: "entry",
+          revision: 0,
+          updated_at: "",
+          deleted_at: null,
+          data: {
+            paperId: paper.id,
+            notebookId: notebook.id,
+            date: today(settings.timezone),
+            title: paper.data.title,
+            markdown: "",
+          },
+        }
+      : undefined;
+  const note = entry || blank;
   async function selection(s: Selection, explain: boolean) {
     setError("");
     let imageAssetId: string | undefined;
@@ -1220,11 +1139,11 @@ function PaperPage({
       imageAssetId,
     });
     if (explain) setAI({ annotation: a, context: s.context });
-    else if (entry) {
+    else if (note) {
       ref.current?.insert(
         `\n[${s.kind === "region" ? "Figure or equation" : s.text.slice(0, 70).replace(/[\[\]\\]/g, "")} · p. ${s.page + 1}](annotation:${a.id})\n${imageAssetId ? `\n![Selected PDF region](asset:${imageAssetId})\n` : ""}`,
       );
-    } else setError("Reference saved. Create an entry to insert it.");
+    } else setError("Reference saved. Open the notes pane to insert it.");
     setParams((p) => {
       p.set("annotation", a.id);
       return p;
@@ -1247,26 +1166,14 @@ function PaperPage({
           >
             <ArrowLeft size={17} />
           </Link>
-          <div>
-            <span className="eyebrow">READING ROOM</span>
-            <h2>{paper.data.title}</h2>
-          </div>
+          <PaperTitle paper={paper} />
         </div>
-        <div className="row">
-          <select
-            aria-label="Workspace panes"
-            value={pane}
-            onChange={(e) => setPane(e.target.value)}
-          >
-            <option value="both">PDF + notes</option>
-            <option value="pdf">PDF only</option>
-            <option value="notes">Notes only</option>
-          </select>
-          <button disabled={busy} onClick={() => void newEntry()}>
-            <Plus size={15} />
-            New dated entry
-          </button>
-        </div>
+        <button
+          className="text-button narrow-pane-toggle"
+          onClick={() => setPane(pane === "pdf" ? "notes" : "pdf")}
+        >
+          {pane === "pdf" ? "Show notes" : "Show PDF"}
+        </button>
       </div>
       <ErrorNotice error={error} />
       <div
@@ -1276,54 +1183,29 @@ function PaperPage({
         <div className="science-pdf">
           <PdfViewer
             paper={paper}
+            expanded={pane === "pdf"}
+            onToggleExpand={() => setPane(pane === "pdf" ? "both" : "pdf")}
             records={records}
             activeAnnotation={annotation}
             focusKey={location.key}
             onSelect={selection}
           />
         </div>
-        <div className="splitter">
-          <input
-            type="range"
-            min="30"
-            max="70"
-            value={split}
-            aria-label="PDF pane width"
-            onChange={(e) => setSplit(Number(e.target.value))}
-          />
-        </div>
+        <Splitter
+          value={split}
+          onChange={(value) => {
+            setSplit(value);
+            localStorage.setItem("kais-journal:split", String(value));
+          }}
+        />
         <section className="science-notes">
-          <div className="notes-header">
-            <span className="eyebrow">YOUR UNDERSTANDING</span>
-            <select
-              aria-label="Paper entry"
-              value={entry?.id || ""}
-              onChange={(e) => setParams({ entry: e.target.value })}
-            >
-              <option disabled value="">
-                Select an entry
-              </option>
-              {entries.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {displayDate(e.data.date)} · {e.data.title || "Untitled"}
-                </option>
-              ))}
-            </select>
-          </div>
-          {entry ? (
+          {note && (
             <EntryWriting
-              key={entry.id}
-              record={entry}
+              key={note.id}
+              record={note}
               records={records}
               editorRef={ref}
             />
-          ) : (
-            <Empty title="A fresh perspective.">
-              <p>Create a dated entry to start taking notes on this paper.</p>
-              <button className="primary" onClick={() => void newEntry()}>
-                Start today’s notes
-              </button>
-            </Empty>
           )}
           {annotation && (
             <div className="annotation-actions">
@@ -1331,7 +1213,7 @@ function PaperPage({
                 Selected source · page {annotation.data.page + 1}
               </span>
               <button
-                disabled={!entry}
+                disabled={!note}
                 onClick={() =>
                   ref.current?.insert(
                     `\n[Source · page ${annotation.data.page + 1}](annotation:${annotation.id})\n`,
@@ -1356,10 +1238,8 @@ function PaperPage({
             records={records}
             onClose={() => setAI(undefined)}
             onInsert={(text) => {
-              if (!entry) {
-                setError(
-                  "Create a dated entry before inserting an explanation.",
-                );
+              if (!note) {
+                setError("Open a paper before inserting an explanation.");
                 return;
               }
               ref.current?.insert(text);
@@ -1380,6 +1260,8 @@ function SettingsPage({
   const save = useSave(),
     setting = ofKind(records, "settings")[0],
     [tz, setTz] = useState(settings.timezone),
+    [mainColor, setMainColor] = useState(settings.mainColor || "#18181b"),
+    [accentColor, setAccentColor] = useState(settings.accentColor || "#f59a56"),
     [message, setMessage] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -1435,8 +1317,7 @@ function SettingsPage({
   }
   return (
     <main className="page settings-page">
-      <p className="eyebrow">MAKE YOURSELF AT HOME</p>
-      <h1>A space that’s yours.</h1>
+      <h1>Settings</h1>
       <ErrorNotice error={error} />
       {message && (
         <p role="status" className="success">
@@ -1444,9 +1325,62 @@ function SettingsPage({
         </p>
       )}
       <section className="settings-card">
+        <h2>Appearance</h2>
+        <div className="row">
+          <label className="field">
+            Main color
+            <input
+              aria-label="Main color"
+              type="color"
+              value={mainColor}
+              onChange={(e) => setMainColor(e.target.value)}
+            />
+          </label>
+          <label className="field">
+            Accent color
+            <input
+              aria-label="Accent color"
+              type="color"
+              value={accentColor}
+              onChange={(e) => setAccentColor(e.target.value)}
+            />
+          </label>
+          <button
+            onClick={() =>
+              void save(
+                "settings",
+                setting?.id || uid(),
+                { ...settings, mainColor, accentColor },
+                setting?.revision || 0,
+              )
+                .then(() => setMessage("Colors saved."))
+                .catch((e) => setError(e.message))
+            }
+          >
+            Save colors
+          </button>
+          <button
+            onClick={() => {
+              setMainColor("#18181b");
+              setAccentColor("#f59a56");
+              void save(
+                "settings",
+                setting?.id || uid(),
+                { ...settings, mainColor: undefined, accentColor: undefined },
+                setting?.revision || 0,
+              )
+                .then(() => setMessage("Default colors restored."))
+                .catch((e) => setError(e.message));
+            }}
+          >
+            Reset colors
+          </button>
+        </div>
+      </section>
+      <section className="settings-card">
         <h2>Your journal day</h2>
         <p className="muted">
-          Today follows your timezone. Entries keep the dates you assign.
+          Today follows your timezone. Entry dates are assigned automatically.
         </p>
         <div className="row">
           <input
@@ -1464,7 +1398,7 @@ function SettingsPage({
         </div>
       </section>
       <section className="settings-card">
-        <h2>Thoughtful AI, within limits</h2>
+        <h2>AI usage</h2>
         <p className="muted">
           Explanations and diagrams share a $20 monthly API ceiling. No
           background generation.
@@ -1488,7 +1422,7 @@ function SettingsPage({
         )}
       </section>
       <section className="settings-card">
-        <h2>Keep a copy of your commonplace</h2>
+        <h2>Export and restore</h2>
         <p className="muted">
           Export Markdown, images, PDFs, source links, and metadata in one ZIP.
           Restore adds new copies without overwriting existing notes.
@@ -1538,9 +1472,7 @@ function SettingsPage({
             </div>
           ))}
       </section>
-      <p className="small muted">
-        Commonplace v0.1 · Built for a life in progress.
-      </p>
+      <p className="small muted">Kai’s Journal</p>
     </main>
   );
 }

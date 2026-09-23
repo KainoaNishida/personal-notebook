@@ -279,6 +279,190 @@ assert.equal(usage.reserved, 0);
 await as("service_role");
 assert.equal((await reserve(randomUUID(), 20000000)).dispatch, true);
 pass("UTC month rollover preserves old ledger while opening a new allowance");
+
+// Approved journal workflow migration, exercised against legacy data.
+await as("authenticated", owner);
+const paperId = randomUUID();
+await save(paperId, "paper", {
+  title: "Old title",
+  assetId,
+  fingerprint: "workflow-proof",
+  pages: 2,
+});
+const paperFirst = randomUUID(),
+  paperSecond = randomUUID();
+await save(paperFirst, "entry", {
+  notebookId: notebook,
+  paperId,
+  date: "2026-09-20",
+  title: "First",
+  markdown: "First study",
+});
+await save(paperSecond, "entry", {
+  notebookId: notebook,
+  paperId,
+  date: "2026-09-21",
+  title: "Second",
+  markdown: "Second study",
+});
+const dailyA = randomUUID(),
+  dailyB = randomUUID();
+await save(dailyA, "entry", {
+  notebookId: notebook,
+  date: "2026-09-23",
+  title: "A",
+  markdown: "Daily A",
+});
+await save(dailyB, "entry", {
+  notebookId: notebook,
+  date: "2026-09-23",
+  title: "B",
+  markdown: "Daily B",
+});
+await save(randomUUID(), "day", {
+  date: "2026-09-23",
+  markdown: "Life reflection",
+});
+await as("postgres");
+await db.exec(
+  await readFile(
+    "supabase/migrations/20260923201135_journal_workflow.sql",
+    "utf8",
+  ),
+);
+await as("authenticated", owner);
+const paperNotes = (
+  await db.query(
+    "select * from records where kind='entry' and data->>'paperId'=$1 and not(data ? 'mergedInto')",
+    [paperId],
+  )
+).rows;
+assert.equal(paperNotes.length, 1);
+assert.match(paperNotes[0].data.markdown, /First study[\s\S]*Second study/);
+const original = (
+  await db.query(
+    "select data from record_versions where record_id=$1 and revision=1",
+    [paperFirst],
+  )
+).rows[0];
+assert.equal(original.data.markdown, "First study");
+assert.equal(
+  (
+    await db.query(
+      "select count(*)::int as n from records where kind='entry' and data->>'paperId'=$1",
+      [paperId],
+    )
+  ).rows[0].n,
+  2,
+);
+pass(
+  "migration consolidates paper notes chronologically and preserves originals",
+);
+const life = (
+  await db.query(
+    "select id from records where kind='notebook' and data->>'name'='Life'",
+  )
+).rows[0].id;
+assert.equal(
+  (
+    await db.query(
+      "select data->>'markdown' as md from records where kind='entry' and data->>'notebookId'=$1",
+      [life],
+    )
+  ).rows[0].md,
+  "Life reflection",
+);
+pass("existing daily reflection becomes a Life entry");
+const daily = (
+  await db.query(
+    "select * from records where kind='entry' and data->>'date'='2026-09-23' and data->>'notebookId'=$1 and not(data ? 'mergedInto')",
+    [notebook],
+  )
+).rows;
+assert.equal(daily.length, 1);
+assert.match(daily[0].data.markdown, /Daily A/);
+assert.match(daily[0].data.markdown, /Daily B/);
+const duplicate = await save(randomUUID(), "entry", {
+  notebookId: notebook,
+  date: "2026-09-23",
+  title: "",
+  markdown: "Another window",
+});
+assert.equal(duplicate.conflict, true);
+assert.equal(duplicate.record.id, daily[0].id);
+pass("duplicate daily creation returns existing record without overwriting it");
+const duplicatePaper = await save(randomUUID(), "entry", {
+  notebookId: notebook,
+  paperId,
+  date: "2026-09-24",
+  title: "",
+  markdown: "New day",
+});
+assert.equal(duplicatePaper.conflict, true);
+assert.equal(duplicatePaper.record.id, paperNotes[0].id);
+pass("paper note identity is independent of date");
+await assert.rejects(
+  () =>
+    save(
+      daily[0].id,
+      "entry",
+      { ...daily[0].data, date: "2026-09-24" },
+      daily[0].revision,
+    ),
+  /date cannot change/,
+);
+pass("entry dates cannot be reassigned");
+const renamed = await save(
+  paperId,
+  "paper",
+  { title: "New title", assetId, fingerprint: "workflow-proof", pages: 2 },
+  1,
+);
+assert.equal(renamed.record.data.title, "New title");
+await assert.rejects(
+  () => save(paperId, "paper", { ...renamed.record.data, pages: 3 }, 2),
+  /identity is immutable/,
+);
+pass("paper rename preserves immutable document identity");
+const restoredId = randomUUID();
+await db.query("select restore_records($1)", [
+  JSON.stringify([
+    {
+      id: restoredId,
+      kind: "entry",
+      data: {
+        notebookId: notebook,
+        paperId,
+        date: "2026-09-23",
+        title: "Restored",
+        markdown: "Restored text",
+      },
+      deleted_at: null,
+    },
+  ]),
+]);
+const restored = (
+  await db.query("select data from records where id=$1", [restoredId])
+).rows[0].data;
+assert.equal(restored.mergedInto, paperNotes[0].id);
+assert.match(
+  (await db.query("select data from records where id=$1", [paperNotes[0].id]))
+    .rows[0].data.markdown,
+  /Restored text/,
+);
+pass("restore appends paper content while retaining the imported original");
+await as("authenticated", outsider);
+assert.equal((await db.query("select * from record_versions")).rows.length, 0);
+await assert.rejects(
+  () => save(randomUUID(), "day", { date: "2026-09-23", markdown: "" }),
+  /Owner access required/,
+);
+await as("anon");
+await assert.rejects(
+  () => db.query("select restore_records($1)", [JSON.stringify([])]),
+  /permission denied/,
+);
+pass("migration retains owner authorization on records, versions, and restore");
 await db.close();
 console.log(
   `\n${checks} database behavior checks passed (real PostgreSQL via PGlite).`,

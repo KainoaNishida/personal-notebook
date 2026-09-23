@@ -3,13 +3,22 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "./service";
 import type { AnyRecord, DataMap, Kind, RecordItem, Snapshot } from "./domain";
 
+// Postgres JSONB can reorder object keys. Compare values, not serialization order.
+export function sameData(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+  const x = a as Record<string, unknown>,
+    y = b as Record<string, unknown>;
+  return (
+    Object.keys(x).length === Object.keys(y).length &&
+    Object.keys(x).every((k) => Object.hasOwn(y, k) && sameData(x[k], y[k]))
+  );
+}
+
 function clearMatchingDraft(id: string, data: unknown) {
   for (const key of recoveryKeys(id)) {
     try {
-      if (
-        JSON.stringify(JSON.parse(localStorage.getItem(key)!).data) ===
-        JSON.stringify(data)
-      )
+      if (sameData(JSON.parse(localStorage.getItem(key)!).data, data))
         localStorage.removeItem(key);
     } catch {
       // Keep unreadable recovery data available until the owner replaces it.
@@ -119,7 +128,7 @@ export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
   const remainingRecovery = useCallback(() => {
     setRecoveryNotice(
       recoveryKeys(record.id).length
-        ? "Other unsaved versions remain in this browser. Reopen this note to review them."
+        ? "Other unsaved versions remain in this browser."
         : "",
     );
   }, [record.id]);
@@ -159,6 +168,18 @@ export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
           if (!s.dirty) remainingRecovery();
         }
       } catch (e) {
+        // An interrupted response or duplicate submit can already be saved.
+        if (e instanceof api.ConflictError && sameData(e.remote.data, data)) {
+          s.record = e.remote as RecordItem<K>;
+          s.dirty = s.value !== data;
+          if (!s.dirty) clearMatchingDraft(record.id, data);
+          if (mounted.current) {
+            setStatus(s.dirty ? "Unsaved" : "Saved");
+            setError("");
+            remainingRecovery();
+          }
+          return;
+        }
         let recoveryFailed = false;
         try {
           persist(s.value, s.record.revision);
@@ -190,7 +211,7 @@ export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
     mounted.current = true;
     const draft = recovery.draft;
     if (draft) {
-      if (JSON.stringify(draft.data) === JSON.stringify(record.data)) {
+      if (sameData(draft.data, record.data)) {
         clearMatchingDraft(record.id, draft.data);
         remainingRecovery();
       } else {
@@ -265,6 +286,22 @@ export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
     setConflict(null);
     await flush();
   };
+  const reviewRecovery = () => {
+    const next = readRecovery(latest.current.record);
+    if (!next) {
+      remainingRecovery();
+      return;
+    }
+    latest.current.value = next.data;
+    latest.current.dirty = true;
+    latest.current.conflict = true;
+    setValue(next.data);
+    setConflict(latest.current.record as AnyRecord);
+    setError(
+      "A recovered draft differs from the saved version. Review both before continuing.",
+    );
+    setStatus("Review recovered draft");
+  };
   return {
     value,
     change,
@@ -274,6 +311,7 @@ export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
     conflict,
     acceptRemote,
     keepMine,
+    reviewRecovery,
     flush,
   };
 }

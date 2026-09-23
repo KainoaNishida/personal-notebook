@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useDraft } from "../src/hooks";
+import { useDraft, sameData } from "../src/hooks";
 import * as api from "../src/service";
 import type { RecordItem } from "../src/domain";
 vi.mock("../src/service", () => ({
@@ -40,6 +40,37 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   vi.clearAllMocks();
+});
+it("ignores JSONB key ordering when checking recovery drafts", () => {
+  const reordered = Object.fromEntries(Object.entries(record.data).reverse());
+  expect(sameData(record.data, reordered)).toBe(true);
+  localStorage.setItem(
+    "recovery-test:note",
+    JSON.stringify({ revision: 1, data: reordered }),
+  );
+  const { result } = setup();
+  expect(result.current.conflict).toBeNull();
+  expect(drafts()).toHaveLength(0);
+});
+it("resumes autosaving after explicitly keeping a conflicting draft", async () => {
+  const remote = {
+    ...record,
+    revision: 2,
+    data: { ...record.data, markdown: "Other window" },
+  };
+  vi.mocked(api.save).mockRejectedValueOnce(new api.ConflictError(remote));
+  vi.mocked(api.save).mockImplementationOnce(
+    async (_kind, _id, data) => ({ ...record, data, revision: 3 }) as never,
+  );
+  const { result } = setup();
+  act(() => result.current.change({ ...record.data, markdown: "My text" }));
+  await act(() => result.current.flush());
+  expect(result.current.conflict).toEqual(remote);
+  await act(() => result.current.keepMine());
+  expect(result.current.conflict).toBeNull();
+  expect(result.current.error).toBe("");
+  expect(result.current.status).toBe("Saved");
+  expect(vi.mocked(api.save).mock.calls[1][3]).toBe(2);
 });
 function drafts() {
   return Object.keys(localStorage)

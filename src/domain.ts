@@ -1,5 +1,4 @@
 import { z } from "zod";
-
 export const kinds = [
   "notebook",
   "entry",
@@ -27,6 +26,7 @@ export interface Entry {
   date: string;
   notebookId: string;
   paperId?: string;
+  mergedInto?: string;
 }
 export interface Paper {
   title: string;
@@ -57,6 +57,9 @@ export interface Annotation {
 export interface Settings {
   timezone: string;
   theme: "dark" | "light";
+  mainColor?: string;
+  accentColor?: string;
+  lifeNotebookId?: string;
 }
 export type DataMap = {
   notebook: Notebook;
@@ -84,11 +87,32 @@ export interface RecordItem<K extends Kind = Kind> {
 export type AnyRecord = { [K in Kind]: RecordItem<K> }[Kind];
 export type Snapshot = AnyRecord[];
 export const uid = () => crypto.randomUUID();
+// Stable IDs let two windows edit a not-yet-saved daily/paper note without
+// creating different recovery slots or racing to create duplicate records.
+export async function entryId(identity: string) {
+  const bytes = new Uint8Array(
+    await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode("kais-journal:entry:" + identity),
+    ),
+  );
+  bytes[6] = (bytes[6] & 15) | 80;
+  bytes[8] = (bytes[8] & 63) | 128;
+  const h = Array.from(bytes.slice(0, 16), (b) =>
+    b.toString(16).padStart(2, "0"),
+  ).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
 export const ofKind = <K extends Kind>(
   items: Snapshot,
   kind: K,
 ): RecordItem<K>[] =>
-  items.filter((r) => r.kind === kind && !r.deleted_at) as RecordItem<K>[];
+  items.filter(
+    (r) =>
+      r.kind === kind &&
+      !r.deleted_at &&
+      !("mergedInto" in r.data && r.data.mergedInto),
+  ) as RecordItem<K>[];
 export function today(timezone = "America/Los_Angeles", date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
@@ -203,16 +227,24 @@ export function validateUpload(
 }
 export const seedNotebooks: Notebook[] = [
   {
+    name: "Life",
+    description: "",
+    color: "#f59a56",
+    icon: "reading",
+    order: 5,
+    archived: false,
+  },
+  {
     name: "Research papers",
-    description: "Follow an idea all the way through.",
-    color: "#b7cba3",
+    description: "",
+    color: "#f59a56",
     icon: "science",
     order: 0,
     archived: false,
   },
   {
     name: "System design",
-    description: "Understand how the pieces fit.",
+    description: "",
     color: "#a5bfce",
     icon: "system",
     order: 1,
@@ -220,7 +252,7 @@ export const seedNotebooks: Notebook[] = [
   },
   {
     name: "Art & portraits",
-    description: "Look a little closer.",
+    description: "",
     color: "#d7b5a3",
     icon: "art",
     order: 2,
@@ -228,7 +260,7 @@ export const seedNotebooks: Notebook[] = [
   },
   {
     name: "Reading",
-    description: "Good sentences. New perspectives.",
+    description: "",
     color: "#c7b8d8",
     icon: "reading",
     order: 3,
@@ -236,7 +268,7 @@ export const seedNotebooks: Notebook[] = [
   },
   {
     name: "Movement",
-    description: "Make space to move.",
+    description: "",
     color: "#d4c398",
     icon: "gym",
     order: 4,

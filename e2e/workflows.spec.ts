@@ -43,7 +43,6 @@ test("manual goals and Markdown persist independently", async ({ page }) => {
   await goal.click();
   await expect(goal).toBeChecked();
   await page.goto("/notebooks/00000000-0000-4000-8000-000000000003");
-  await page.getByRole("button", { name: "New entry", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Entry title" })
     .fill("A small discovery");
@@ -59,7 +58,6 @@ test("manual goals and Markdown persist independently", async ({ page }) => {
   await expect(page.locator(".katex").first()).toBeVisible();
   await page.goto("/");
   await expect(goal).toBeChecked();
-  await page.getByRole("link", { name: "History", exact: true }).click();
   await page.getByRole("button", { name: "Previous day" }).click();
   await expect(goal).not.toBeChecked();
 });
@@ -73,8 +71,25 @@ test("PDF regions survive zoom and reload; AI only opens on request", async ({
     mimeType: "application/pdf",
     buffer: pdf(true),
   });
-  await page.getByRole("button", { name: "New dated entry" }).click();
   await expect(page.locator(".textLayer")).toContainText("Attention combines");
+  await expect(
+    page.getByRole("combobox", { name: "Workspace panes" }),
+  ).toHaveCount(0);
+  const before = (await page.locator(".science-pdf").boundingBox())!;
+  await page.getByRole("button", { name: "Expand PDF", exact: true }).click();
+  await expect(page.locator(".science-notes")).toBeHidden();
+  expect(
+    (await page.locator(".science-pdf").boundingBox())!.width,
+  ).toBeGreaterThan(before.width * 1.5);
+  await page
+    .getByRole("button", { name: "Restore split view", exact: true })
+    .click();
+  const divider = page.getByRole("separator", { name: "Resize PDF and notes" });
+  await divider.press("ArrowRight");
+  await expect(divider).toHaveAttribute("aria-valuenow", "52");
+  await divider.press("Home");
+  await expect(divider).toHaveAttribute("aria-valuenow", "50");
+
   await page.getByRole("button", { name: "Select PDF region" }).click();
   const bounds = (await page.locator(".region-layer").boundingBox())!;
   await page.mouse.move(bounds.x + 40, bounds.y + 40);
@@ -87,9 +102,11 @@ test("PDF regions survive zoom and reload; AI only opens on request", async ({
   // Autosave reorders the query cache, then a server refresh replaces object
   // references. Neither event should navigate back to an old source link.
   await page.getByRole("spinbutton", { name: "PDF page" }).fill("2");
+  await page.getByRole("button", { name: /Rename paper:/ }).click();
   await page
-    .getByRole("textbox", { name: "Entry title" })
+    .getByRole("textbox", { name: "Paper title", exact: true })
     .fill("Reading on page two");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Saved", { exact: true })).toBeVisible();
   const other = await page.context().newPage();
   await other.goto("/");
@@ -121,12 +138,11 @@ test("PDF regions survive zoom and reload; AI only opens on request", async ({
   await expect(page.getByText(/Restored \d+ records/)).toBeVisible();
   await page.goto("/papers");
   await expect(page.locator(".paper-card")).toHaveCount(1);
-  await expect(page.locator(".paper-card")).toContainText("2 dated entries");
+  await expect(page.locator(".paper-card")).toContainText("1 notes");
 });
 
 test("image, diagram, undo, search and trash recovery", async ({ page }) => {
   await page.goto("/notebooks/00000000-0000-4000-8000-000000000002");
-  await page.getByRole("button", { name: "New entry", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Entry title" })
     .fill("A visual notebook");
@@ -195,7 +211,6 @@ test("concurrent edits show recoverable conflict instead of overwriting", async 
   context,
 }) => {
   await page.goto("/notebooks/00000000-0000-4000-8000-000000000003");
-  await page.getByRole("button", { name: "New entry", exact: true }).click();
   const other = await context.newPage();
   await other.goto(page.url());
   await expect(other.getByRole("textbox", { name: "Entry title" })).toHaveValue(
@@ -206,21 +221,21 @@ test("concurrent edits show recoverable conflict instead of overwriting", async 
   await other
     .getByRole("textbox", { name: "Entry title" })
     .fill("Second window");
-  await expect(other.getByText("Not saved", { exact: true })).toBeVisible();
+  await expect(
+    other.getByText("Save needs review", { exact: true }),
+  ).toBeVisible();
   await other.reload();
   await expect(
-    other.getByText("Review recovered draft", { exact: true }),
+    other.getByText("Save needs review", { exact: true }),
   ).toBeVisible();
   await expect(other.getByRole("textbox", { name: "Entry title" })).toHaveValue(
     "Second window",
   );
-  await other.getByText("Review the saved version", { exact: true }).click();
-  await expect(other.locator(".conflict-preview")).toContainText(
-    "First window",
-  );
   await other
-    .getByRole("button", { name: "Save my recovered version" })
+    .getByRole("button", { name: "Review versions", exact: true })
     .click();
+  await expect(other.locator(".conflict-review")).toContainText("First window");
+  await other.getByRole("button", { name: "Keep this window" }).click();
   await expect(other.getByText("Saved", { exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("textbox", { name: "Entry title" })).toHaveValue(
@@ -239,7 +254,6 @@ test("optional private attention sample: page four and exact-context preview", a
   await page
     .locator("input[type=file]")
     .setInputFiles(process.env.SAMPLE_PDF_PATH!);
-  await page.getByRole("button", { name: "New dated entry" }).click();
   await expect(page.locator(".pdf-loading")).toHaveCount(0);
   await page.getByRole("spinbutton", { name: "PDF page" }).fill("4");
   await expect(page.getByRole("spinbutton", { name: "PDF page" })).toHaveValue(

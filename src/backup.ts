@@ -3,7 +3,6 @@ import { z } from "zod";
 import { kinds, uid, ofKind, responseSchema, visualSchema } from "./domain";
 import type { Snapshot, AnyRecord, Asset } from "./domain";
 import * as api from "./service";
-
 const id = z.string().uuid(),
   date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const schemas: Record<string, z.ZodType> = {
@@ -21,8 +20,13 @@ const schemas: Record<string, z.ZodType> = {
     date,
     notebookId: id,
     paperId: id.optional(),
+    mergedInto: id.optional(),
   }),
-  day: z.object({ date, markdown: z.string().max(1000000) }),
+  day: z.object({
+    date,
+    markdown: z.string().max(1000000),
+    migratedTo: id.optional(),
+  }),
   activity: z.object({ date, notebookId: id, completed: z.boolean() }),
   paper: z.object({
     title: z.string(),
@@ -54,6 +58,15 @@ const schemas: Record<string, z.ZodType> = {
   settings: z.object({
     timezone: z.string(),
     theme: z.enum(["dark", "light"]),
+    lifeNotebookId: id.optional(),
+    mainColor: z
+      .string()
+      .regex(/^#[\da-fA-F]{6}$/)
+      .optional(),
+    accentColor: z
+      .string()
+      .regex(/^#[\da-fA-F]{6}$/)
+      .optional(),
   }),
   conversation: z.object({
     annotationId: id,
@@ -118,6 +131,9 @@ export function remapReferences(
       "assetId",
       "imageAssetId",
       "annotationId",
+      "mergedInto",
+      "migratedTo",
+      "lifeNotebookId",
     ])
       if (typeof data[key] === "string")
         data[key] = mapping.get(data[key] as string) || data[key];
@@ -180,7 +196,7 @@ export async function exportArchive(records: Snapshot) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `commonplace-${new Date().toISOString().slice(0, 10)}.zip`;
+  a.download = `kais-journal-${new Date().toISOString().slice(0, 10)}.zip`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

@@ -2,19 +2,18 @@ import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
 import { useQuery } from "@tanstack/react-query";
 import { download } from "../service";
 import { ofKind, plotSchema } from "../domain";
 import type { Snapshot } from "../domain";
-
 // Presentation is intentionally independent of canonical asset:<id> Markdown.
 // V1 passes no overrides; the art-layout proof exercises this extension point.
 export type ImagePresentation = {
   alignment: "inline" | "left" | "right";
   width: number;
 };
-
 export function safeUrl(url: string) {
   return /^(https?:|mailto:|asset:|annotation:)/i.test(url) ||
     url.startsWith("#")
@@ -231,7 +230,13 @@ export function Markdown({
     <div className="markdown">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex]}
+        rehypePlugins={[
+          rehypeKatex,
+          [
+            rehypeHighlight,
+            { ignoreMissing: true, plainText: ["mermaid", "plot"] },
+          ],
+        ]}
         skipHtml
         urlTransform={safeUrl}
         components={{
@@ -261,7 +266,25 @@ export function Markdown({
                 Upload reference images to keep them private.
               </span>
             ),
-          pre: ({ children }) => <div className="code-block">{children}</div>,
+          pre: ({ children, node }) => (
+            <CodeBlock
+              text={
+                node?.children
+                  .map((n) =>
+                    "children" in n
+                      ? n.children
+                          .map((c) => ("value" in c ? c.value : ""))
+                          .join("")
+                      : "value" in n
+                        ? n.value
+                        : "",
+                  )
+                  .join("") || ""
+              }
+            >
+              {children}
+            </CodeBlock>
+          ),
           code: ({ className, children }) => {
             const lang = className?.replace("language-", "");
             const source = String(children).trim();
@@ -277,6 +300,36 @@ export function Markdown({
       >
         {text}
       </ReactMarkdown>
+    </div>
+  );
+}
+function CodeBlock({
+  children,
+  text,
+}: {
+  children: React.ReactNode;
+  text: string;
+}) {
+  const [status, setStatus] = useState("Copy");
+  return (
+    <div className="code-block">
+      <button
+        className="copy-code"
+        onClick={async (e) => {
+          try {
+            await navigator.clipboard.writeText(
+              e.currentTarget.parentElement?.querySelector("code")
+                ?.textContent || text,
+            );
+            setStatus("Copied");
+          } catch {
+            setStatus("Copy failed");
+          }
+        }}
+      >
+        {status}
+      </button>
+      <div className="code-content">{children}</div>
     </div>
   );
 }

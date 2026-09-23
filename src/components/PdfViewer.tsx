@@ -6,6 +6,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Scan,
+  Maximize2,
+  Minimize2,
   Highlighter,
   Link2,
   Sparkles,
@@ -32,7 +34,11 @@ export function PdfViewer({
   activeAnnotation,
   focusKey,
   onSelect,
+  expanded,
+  onToggleExpand,
 }: {
+  expanded?: boolean;
+  onToggleExpand?: () => void;
   paper: RecordItem<"paper">;
   records: Snapshot;
   activeAnnotation?: RecordItem<"annotation">;
@@ -66,6 +72,26 @@ export function PdfViewer({
     pageText = useRef(""),
     start = useRef<{ x: number; y: number } | undefined>(undefined),
     [width, setWidth] = useState(550);
+  const readingY = useRef<number | null>(null);
+  function changeZoom(next: number) {
+    const el = scroll.current;
+    if (el)
+      readingY.current =
+        (el.scrollTop + el.clientHeight / 2 - 22) / size.height;
+    setZoom(Math.round(next * 10) / 10);
+  }
+  useEffect(() => {
+    const el = scroll.current;
+    if (!el) return;
+    el.scrollLeft = Math.max(0, (el.scrollWidth - el.clientWidth) / 2);
+    if (readingY.current !== null) {
+      el.scrollTop = Math.max(
+        0,
+        readingY.current * size.height + 22 - el.clientHeight / 2,
+      );
+      readingY.current = null;
+    }
+  }, [size.width, size.height]);
   useEffect(() => {
     const el = scroll.current!;
     const o = new ResizeObserver(() =>
@@ -167,13 +193,16 @@ export function PdfViewer({
       layer?.cancel();
     };
   }, [doc, page, zoom, width]);
+  const lastAnchor = useRef("");
   useEffect(() => {
     if (
+      lastAnchor.current !== `${anchorId}:${focusKey}` &&
       ready &&
       anchorX !== undefined &&
       anchorY !== undefined &&
       anchorPage === page - 1
     ) {
+      lastAnchor.current = `${anchorId}:${focusKey}`;
       scroll.current?.scrollTo({
         top: Math.max(0, anchorY * size.height - 80),
         left: Math.max(0, anchorX * size.width - 80),
@@ -315,7 +344,7 @@ export function PdfViewer({
             className="icon-button"
             aria-label="Zoom out"
             disabled={zoom <= 0.6}
-            onClick={() => setZoom((z) => z - 0.1)}
+            onClick={() => changeZoom(zoom - 0.1)}
           >
             <Minus size={15} />
           </button>
@@ -324,7 +353,7 @@ export function PdfViewer({
             className="icon-button"
             aria-label="Zoom in"
             disabled={zoom >= 2}
-            onClick={() => setZoom((z) => z + 0.1)}
+            onClick={() => changeZoom(zoom + 0.1)}
           >
             <Plus size={15} />
           </button>
@@ -344,7 +373,15 @@ export function PdfViewer({
             className="icon-button"
             onClick={() => setMode("region")}
           >
-            <Scan size={17} />
+            <Scan size={17} /> Region
+          </button>
+          <button
+            className="icon-button"
+            title={expanded ? "Restore split view" : "Expand PDF"}
+            aria-label={expanded ? "Restore split view" : "Expand PDF"}
+            onClick={onToggleExpand}
+          >
+            {expanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
           </button>
         </div>
       </div>
@@ -471,33 +508,33 @@ export function PdfViewer({
           )}
         </div>
       </div>
-      <div className="pdf-footer">
-        {selection ? (
-          <>
-            <span>
-              {selection.kind === "region"
-                ? "Visual region selected"
-                : `${selection.text.length} characters selected`}
-            </span>
-            <div className="row">
-              <button disabled={busy} onClick={() => void submit(false)}>
-                <Link2 size={14} />
-                Link to notes
-              </button>
-              <button
-                className="primary"
-                disabled={busy}
-                onClick={() => void submit(true)}
-              >
-                <Sparkles size={14} />
-                Explain
-              </button>
-            </div>
-          </>
-        ) : (
-          <span>Select a passage or region to connect it to your notes.</span>
-        )}
-      </div>
+      {selection && (
+        <div className="pdf-footer">
+          {selection ? (
+            <>
+              <span>
+                {selection.kind === "region"
+                  ? "Visual region selected"
+                  : `${selection.text.length} characters selected`}
+              </span>
+              <div className="row">
+                <button disabled={busy} onClick={() => void submit(false)}>
+                  <Link2 size={14} />
+                  Link to notes
+                </button>
+                <button
+                  className="primary"
+                  disabled={busy}
+                  onClick={() => void submit(true)}
+                >
+                  <Sparkles size={14} />
+                  Explain
+                </button>
+              </div>
+            </>
+          ) : null}
+        </div>
+      )}
     </section>
   );
 }

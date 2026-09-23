@@ -64,9 +64,9 @@ function sample(): Snapshot {
       data: {
         notebookId: ns[0].id,
         date: today(),
-        title: "A space for the things I’m learning",
+        title: "Journal setup",
         markdown:
-          "# A little, every day.\n\nSome days, a paper. Other days, a few pages, a sketch, or time spent moving. This is a place to collect the small things.\n\n## What I’m curious about\n\n- How attention turns a sequence into context\n- Systems that stay simple as they grow\n- Learning to notice light and shadow\n\n> Progress doesn’t have to look the same every day.\n\nThis is sample content in a local design preview. Your private notebook will start empty.",
+          "# Journal setup\n\nThis is a local preview. Hosted notes are stored separately.",
       },
     },
   ];
@@ -141,6 +141,21 @@ export async function save<K extends Kind>(
     const all = preview(),
       i = all.findIndex((r) => r.id === id),
       old = all[i];
+    if (!old && kind === "entry" && !deletedAt) {
+      const entry = data as DataMap["entry"];
+      const prior = all.find(
+        (r) =>
+          r.kind === "entry" &&
+          !r.deleted_at &&
+          !r.data.mergedInto &&
+          (entry.paperId
+            ? r.data.paperId === entry.paperId
+            : !r.data.paperId &&
+              r.data.notebookId === entry.notebookId &&
+              r.data.date === entry.date),
+      );
+      if (prior) throw new ConflictError(prior);
+    }
     if (old && old.revision !== revision) throw new ConflictError(old);
     const next = {
       id,
@@ -293,10 +308,39 @@ export async function usage(): Promise<Usage> {
 }
 export async function restoreBatch(records: Snapshot) {
   if (demo) {
-    localStorage.setItem(
-      previewKey,
-      JSON.stringify([...preview(), ...records]),
-    );
+    const all = preview();
+    for (const record of structuredClone(records)) {
+      if (
+        record.kind === "entry" &&
+        !record.deleted_at &&
+        !record.data.mergedInto
+      ) {
+        const incoming = record.data;
+        const prior = all.find(
+          (r): r is RecordItem<"entry"> =>
+            r.kind === "entry" &&
+            !r.deleted_at &&
+            !r.data.mergedInto &&
+            (incoming.paperId
+              ? r.data.paperId === incoming.paperId
+              : !r.data.paperId &&
+                r.data.notebookId === incoming.notebookId &&
+                r.data.date === incoming.date),
+        );
+        if (prior) {
+          if (
+            prior.data.markdown !== incoming.markdown &&
+            incoming.markdown.trim()
+          )
+            prior.data.markdown +=
+              "\n\n---\n\n## Restored notes\n\n" + incoming.markdown;
+          prior.revision++;
+          record.data.mergedInto = prior.id;
+        }
+      }
+      all.push(record);
+    }
+    localStorage.setItem(previewKey, JSON.stringify(all));
     return;
   }
   if (!supabase) throw new Error("Backend is not configured.");

@@ -8,6 +8,22 @@ import {
   isPlainDiagram,
 } from "../src/components/Markdown";
 describe("safe visual rendering", () => {
+  it("renders fractions and highlighted code without changing the code text", () => {
+    const code = "def attention(q):\n    return q / 2\n";
+    const { container } = render(
+      <Markdown
+        text={"$$\n\\frac{QK^T}{\\sqrt{d_k}}\n$$\n\n```python\n" + code + "```"}
+      />,
+    );
+    expect(container.querySelector(".katex .mfrac")).not.toBeNull();
+    expect(container.querySelector("code.language-python")?.textContent).toBe(
+      code,
+    );
+    expect(
+      container.querySelector("code.language-python .hljs-keyword"),
+    ).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
+  });
   it("allows scientific arrows in quoted labels while rejecting interactive or HTML diagrams", () => {
     expect(
       isPlainDiagram(

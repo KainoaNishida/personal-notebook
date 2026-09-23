@@ -1,5 +1,7 @@
 # V1 implementation and release evidence
 
+September 23 update: the approved journal/PDF feedback is implemented and deployed. See [feedback implementation and verification](FEEDBACK-IMPLEMENTATION.md). The sections below retain the initial-release evidence; the feedback update supersedes the dated paper notes and separate History/Papers navigation.
+
 **Deployed for owner use; final acceptance remains open.** The hosted journal → PDF selection → AI explanation/follow-up → inserted visual → reopen workflow passes. The owner reports no obvious usability issues so far. Independent-browser synchronization confirmation remains pending. Updated September 22, 2026 (Pacific time).
 
 Live app: https://commonplace-kainoa-nishidas-projects.vercel.app

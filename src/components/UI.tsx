@@ -9,6 +9,7 @@ import {
   Dumbbell,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 export function SubjectIcon({
   name,
   size = 20,
@@ -77,9 +78,18 @@ export function Empty({
   );
 }
 export function ErrorNotice({ error }: { error: unknown }) {
-  return error ? (
+  const [dismissed, setDismissed] = useState(false);
+  useEffect(() => setDismissed(false), [error]);
+  return error && !dismissed ? (
     <div role="alert" className="inline-error">
       {error instanceof Error ? error.message : String(error)}
+      <button
+        className="icon-button"
+        aria-label="Dismiss message"
+        onClick={() => setDismissed(true)}
+      >
+        <X size={14} />
+      </button>
     </div>
   ) : null;
 }

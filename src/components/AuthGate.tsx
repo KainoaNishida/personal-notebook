@@ -4,9 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, LoaderCircle } from "lucide-react";
 import * as api from "../service";
 import { ErrorNotice } from "./UI";
-
 type Mode = "login" | "request" | "recovery";
-
 export function AuthGate({ children }: { children: ReactNode }) {
   const query = useQueryClient();
   // Capture the recovery intent before the auth client removes URL fragments.
@@ -24,7 +22,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
-
   useEffect(() => {
     if (api.demo) return;
     let active = true;
@@ -55,7 +52,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
       sub?.data.subscription.unsubscribe();
     };
   }, [query]);
-
   function switchMode(next: Mode) {
     setMode(next);
     setPassword("");
@@ -63,7 +59,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
     setError("");
     setSent(false);
   }
-
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
@@ -102,9 +97,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
       setBusy(false);
     }
   }
-
   if (!ready)
-    return <div className="loading-screen">Opening your commonplace…</div>;
+    return <div className="loading-screen">Opening Kai’s Journal…</div>;
   if (signed && mode !== "recovery") return <>{children}</>;
   const expired = mode === "recovery" && !signed;
   return (

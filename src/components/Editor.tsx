@@ -24,6 +24,8 @@ import {
   drawSelection,
 } from "@codemirror/view";
 import type { DecorationSet } from "@codemirror/view";
+import { languages } from "@codemirror/language-data";
+import { indentWithTab } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import {
@@ -33,7 +35,6 @@ import {
 import { Code2, Eye, ImagePlus } from "lucide-react";
 import { Markdown } from "./Markdown";
 import type { Snapshot } from "../domain";
-
 type Context = {
   records: Snapshot;
   onAnnotation?: (id: string) => void;
@@ -208,17 +209,13 @@ export const Editor = forwardRef<
       state: EditorState.create({
         doc: value,
         extensions: [
-          markdown(),
+          markdown({ codeLanguages: languages }),
           history(),
-          keymap.of([...defaultKeymap, ...historyKeymap]),
+          keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
           drawSelection(),
           syntaxHighlighting(defaultHighlightStyle),
           EditorView.lineWrapping,
-          placeholder(
-            compact
-              ? "What stayed with you today?"
-              : "Start writing. An idea, a question, a small discovery…",
-          ),
+          placeholder(compact ? "Write a reflection…" : "Write a note…"),
           EditorView.contentAttributes.of({
             "aria-label": label,
             spellcheck: "true",
@@ -275,7 +272,9 @@ export const Editor = forwardRef<
     });
   }, [source, records, onAnnotation, client]);
   return (
-    <div className={`editor ${compact ? "compact" : ""}`}>
+    <div
+      className={`editor ${compact ? "compact" : ""} ${source ? "source-mode" : ""}`}
+    >
       <div className="editor-toolbar">
         <span className="eyebrow">
           {source ? "Markdown source" : "Live preview"}
