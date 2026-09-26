@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { ofKind, entryId } from "../domain";
 import type { RecordItem, Snapshot } from "../domain";
@@ -30,6 +31,21 @@ export function DailyEntry({
       e.data.notebookId === notebook.id &&
       e.data.date === date,
   );
+  const trashed = records.some(
+    (e) =>
+      e.kind === "entry" &&
+      e.deleted_at &&
+      !e.data.paperId &&
+      e.data.notebookId === notebook.id &&
+      e.data.date === date,
+  );
+  if (!existing && trashed)
+    return (
+      <p className="muted">
+        This day's section is in Trash.{" "}
+        <Link to="/settings">Restore it in Settings</Link> to continue writing.
+      </p>
+    );
   if (!id && !existing) return <p className="muted">Opening note…</p>;
   const blank: RecordItem<"entry"> = {
     id,

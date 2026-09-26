@@ -76,3 +76,8 @@ Record subsequent answers here, update the contract, and flag any changed milest
 Checked September 22, 2026: OpenAI documents API usage pricing separately in its [API pricing documentation](https://developers.openai.com/api/docs/pricing). Gemini documents project-based free and paid API tiers in its [API billing documentation](https://ai.google.dev/gemini-api/docs/billing). Existing consumer subscriptions are not sufficient evidence of available app API credits. No account-specific entitlement has been inspected. The owner subsequently set an API ceiling of $20/month; select a provider and validate current prices before paid setup.
 
 Before implementing hosted generation, settle provider/API access and applicable data handling, and implement the shared spending controls in COST-01. Prefer app-rendered structured math/diagrams where suitable and evaluate model quality on the supplied equation before choosing the least expensive adequate option. A manual copy/paste workflow with an existing chat app remains a fallback, not fulfillment of the integrated feature.
+
+
+## Second iteration
+
+The approved second iteration supersedes earlier manual-goal, light-theme, date-picker and paper-grid behavior. See [second-iteration implementation and verification](SECOND-ITERATION.md) for the current contract and rollout evidence.

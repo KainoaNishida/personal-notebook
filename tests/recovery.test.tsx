@@ -245,3 +245,21 @@ it("preserves each losing window through overlapping saves and recovery review",
   expect(remaining.result.current.status).toBe("Review recovered draft");
   expect(remaining.result.current.value.title).not.toBe(chosen);
 });
+
+it("preserves the recovered writing day when a draft is saved after midnight", async () => {
+  localStorage.setItem(
+    "recovery-test:note",
+    JSON.stringify({
+      revision: 1,
+      data: { ...record.data, markdown: "Recovered words from yesterday" },
+      writingDate: "2026-09-25",
+      updatedAt: Date.now(),
+    }),
+  );
+  vi.mocked(api.save).mockImplementation(
+    async (_kind, _id, data) => ({ ...record, data, revision: 2 }) as never,
+  );
+  const { result } = setup();
+  await act(() => result.current.keepMine());
+  expect(vi.mocked(api.save).mock.calls[0][5]).toBe("2026-09-25");
+});

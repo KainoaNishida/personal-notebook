@@ -34,6 +34,22 @@ async function denied(path, body, method = "POST") {
 }
 await denied("/rest/v1/records?select=id", undefined, "GET");
 await denied("/rest/v1/rpc/get_usage", {});
+await denied("/rest/v1/rpc/save_entry", {
+  p_id: crypto.randomUUID(),
+  p_data: {},
+  p_revision: 0,
+});
+await denied("/rest/v1/rpc/save_time", {
+  p_id: crypto.randomUUID(),
+  p_notebook: crypto.randomUUID(),
+  p_date: "2026-09-26",
+  p_minutes: 0,
+  p_revision: 0,
+});
+await denied("/rest/v1/rpc/record_study", {
+  p_notebook: crypto.randomUUID(),
+  p_paper: crypto.randomUUID(),
+});
 await denied("/rest/v1/rpc/reserve_generation", {
   p_id: crypto.randomUUID(),
   p_owner: crypto.randomUUID(),

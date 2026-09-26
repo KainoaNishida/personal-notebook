@@ -1,6 +1,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   X,
+  Code2,
   Sprout,
   BookOpen,
   FlaskConical,
@@ -25,6 +26,7 @@ export function SubjectIcon({
         art: Pencil,
         gym: Dumbbell,
         reading: BookOpen,
+        code: Code2,
       } as Record<string, typeof Sprout>
     )[name || ""] || Sprout;
   return <Icon size={size} strokeWidth={1.5} />;

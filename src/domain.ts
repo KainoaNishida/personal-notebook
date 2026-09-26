@@ -10,6 +10,9 @@ export const kinds = [
   "settings",
   "conversation",
   "artifact",
+  "label",
+  "writing_progress",
+  "study",
 ] as const;
 export type Kind = (typeof kinds)[number];
 export interface Notebook {
@@ -19,6 +22,7 @@ export interface Notebook {
   icon: string;
   order: number;
   archived: boolean;
+  research?: boolean;
 }
 export interface Entry {
   title: string;
@@ -27,6 +31,7 @@ export interface Entry {
   notebookId: string;
   paperId?: string;
   mergedInto?: string;
+  labelIds?: string[];
 }
 export interface Paper {
   title: string;
@@ -65,7 +70,28 @@ export type DataMap = {
   notebook: Notebook;
   entry: Entry;
   day: { date: string; markdown: string };
-  activity: { date: string; notebookId: string; completed: boolean };
+  activity: {
+    date: string;
+    notebookId: string;
+    completed: boolean;
+    minutes?: number;
+    provenance?: "manual" | "writing";
+    completedAt?: string;
+  };
+  label: { notebookId: string; name: string; color: string };
+  writing_progress: {
+    entryId: string;
+    notebookId: string;
+    date: string;
+    baseline: string[];
+    maxAdded: number;
+  };
+  study: {
+    paperId: string;
+    notebookId: string;
+    date: string;
+    source: "writing" | "time" | "visit" | "history";
+  };
   paper: Paper;
   annotation: Annotation;
   asset: Asset;
@@ -239,6 +265,7 @@ export const seedNotebooks: Notebook[] = [
     description: "",
     color: "#f59a56",
     icon: "science",
+    research: true,
     order: 0,
     archived: false,
   },

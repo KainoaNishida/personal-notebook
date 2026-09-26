@@ -463,6 +463,311 @@ await assert.rejects(
   /permission denied/,
 );
 pass("migration retains owner authorization on records, versions, and restore");
+await as("postgres");
+await db.exec(
+  await readFile(
+    "supabase/migrations/20260926222912_second_iteration.sql",
+    "utf8",
+  ),
+);
+await as("authenticated", owner);
+const day = (
+  await db.query(
+    "select (now() at time zone 'America/Los_Angeles')::date::text d",
+  )
+).rows[0].d;
+const writingId = randomUUID();
+const writingData = {
+  notebookId: notebook,
+  date: day,
+  title: "Progress",
+  markdown: "one two three four",
+};
+let written = await save(writingId, "entry", writingData);
+const activityFor = async () =>
+  (
+    await db.query(
+      "select * from records where kind='activity' and data->>'notebookId'=$1 and data->>'date'=$2",
+      [notebook, day],
+    )
+  ).rows[0];
+assert.equal((await activityFor())?.data.completed || false, false);
+written = await save(
+  writingId,
+  "entry",
+  {
+    ...writingData,
+    markdown: "**one** two three four [five](https://example.com/extra-words)",
+  },
+  written.record.revision,
+);
+assert.equal((await activityFor()).data.completed, true);
+const earned = (await activityFor()).data.completedAt;
+written = await save(
+  writingId,
+  "entry",
+  { ...writingData, markdown: "" },
+  written.record.revision,
+);
+assert.equal((await activityFor()).data.completedAt, earned);
+pass("four versus five saved body words and completion latch after deletion");
+const countBefore = (
+  await db.query(
+    "select count(*)::int n from records where kind='writing_progress'",
+  )
+).rows[0].n;
+assert.equal(
+  (
+    await save(
+      writingId,
+      "entry",
+      { ...writingData, markdown: "many new words in a stale save" },
+      1,
+    )
+  ).conflict,
+  true,
+);
+assert.equal(
+  (
+    await db.query(
+      "select count(*)::int n from records where kind='writing_progress'",
+    )
+  ).rows[0].n,
+  countBefore,
+);
+pass("stale writes cannot award progress");
+const lab = randomUUID(),
+  otherNotebook = randomUUID();
+await save(otherNotebook, "notebook", {
+  name: "Other",
+  description: "",
+  color: "#f59a56",
+  icon: "reading",
+  order: 10,
+  archived: false,
+});
+await save(lab, "label", {
+  notebookId: notebook,
+  name: " Theory ",
+  color: "#f59a56",
+});
+await assert.rejects(
+  () =>
+    save(randomUUID(), "label", {
+      notebookId: notebook,
+      name: "theory",
+      color: "#f59a56",
+    }),
+  /duplicate key/,
+);
+const cross = randomUUID();
+await save(cross, "label", {
+  notebookId: otherNotebook,
+  name: "Theory",
+  color: "#f59a56",
+});
+await assert.rejects(
+  () =>
+    save(
+      writingId,
+      "entry",
+      { ...writingData, labelIds: [cross] },
+      written.record.revision,
+    ),
+  /another notebook/,
+);
+written = await save(
+  writingId,
+  "entry",
+  { ...writingData, markdown: "", labelIds: [lab] },
+  written.record.revision,
+);
+pass("normalized label uniqueness and notebook isolation");
+let activity = await activityFor();
+await assert.rejects(
+  () =>
+    db.query("select save_time($1,$2,$3,$4,$5)", [
+      activity.id,
+      notebook,
+      day,
+      -1,
+      activity.revision,
+    ]),
+  /Minutes/,
+);
+const time = (
+  await db.query("select save_time($1,$2,$3,$4,$5,$6) value", [
+    activity.id,
+    notebook,
+    day,
+    75,
+    activity.revision,
+    paperId,
+  ])
+).rows[0].value;
+assert.equal(time.record.data.minutes, 75);
+assert.equal(time.record.data.completed, true);
+assert.equal(
+  (
+    await db.query(
+      "select count(*)::int n from records where kind='study' and data->>'paperId'=$1 and data->>'date'=$2",
+      [paperId, day],
+    )
+  ).rows[0].n,
+  1,
+);
+await db.query("select record_study($1,$2,$3)", [notebook, paperId, day]);
+assert.equal(
+  (
+    await db.query(
+      "select count(*)::int n from records where kind='study' and data->>'paperId'=$1 and data->>'date'=$2",
+      [paperId, day],
+    )
+  ).rows[0].n,
+  1,
+);
+pass(
+  "time validation, independent completion and idempotent paper study dates",
+);
+// Existing long notes establish a shared baseline at their first tracked edit.
+const priorPaper = (
+  await db.query("select * from records where id=$1", [paperNotes[0].id])
+).rows[0];
+await save(
+  priorPaper.id,
+  "entry",
+  {
+    ...priorPaper.data,
+    markdown: priorPaper.data.markdown + "\n![](asset:" + assetId + ")",
+  },
+  priorPaper.revision,
+);
+const paperProgress = (
+  await db.query(
+    "select data from records where kind='writing_progress' and data->>'entryId'=$1",
+    [priorPaper.id],
+  )
+).rows[0].data;
+assert.equal(paperProgress.maxAdded, 0);
+pass("existing notes and image filenames earn no new body words");
+const firstPart = await save(randomUUID(), "entry", {
+  notebookId: otherNotebook,
+  date: "2020-01-01",
+  title: "",
+  markdown: "alpha beta",
+});
+assert.equal(
+  (
+    await db.query(
+      "select count(*)::int n from records where kind='activity' and data->>'notebookId'=$1 and (data->>'completed')::boolean",
+      [otherNotebook],
+    )
+  ).rows[0].n,
+  0,
+);
+await db.query("select restore_records($1)", [
+  JSON.stringify([
+    {
+      id: randomUUID(),
+      kind: "entry",
+      data: {
+        ...firstPart.record.data,
+        markdown: "imported words must never earn activity",
+      },
+      deleted_at: null,
+    },
+  ]),
+]);
+const afterImport = (
+  await db.query("select * from records where id=$1", [firstPart.record.id])
+).rows[0];
+await save(
+  afterImport.id,
+  "entry",
+  { ...afterImport.data, markdown: afterImport.data.markdown + " gamma" },
+  afterImport.revision,
+);
+assert.equal(
+  (
+    await db.query(
+      "select (data->>'maxAdded')::int n from records where kind='writing_progress' and data->>'entryId'=$1",
+      [afterImport.id],
+    )
+  ).rows[0].n,
+  3,
+);
+await save(randomUUID(), "entry", {
+  notebookId: otherNotebook,
+  date: "2020-01-02",
+  title: "",
+  markdown: "delta epsilon",
+});
+assert.equal(
+  (
+    await db.query(
+      "select (data->>'completed')::boolean done from records where kind='activity' and data->>'notebookId'=$1 and data->>'date'=$2",
+      [otherNotebook, day],
+    )
+  ).rows[0].done,
+  true,
+);
+pass(
+  "imports earn no writing credit and progress aggregates across notebook pages",
+);
+await assert.rejects(
+  () =>
+    db.query("select save_entry($1,$2,$3,$4)", [
+      randomUUID(),
+      JSON.stringify({ ...writingData, date: "2099-01-01" }),
+      0,
+      "2099-01-01",
+    ]),
+  /outside the tracking period/,
+);
+pass("future writing days are rejected atomically");
+await as("postgres");
+assert.equal(
+  (
+    await db.query(
+      "select journal_private.added_words('[\"one\",\"two\"]','**two** one ![filename.png](asset:id)') n",
+    )
+  ).rows[0].n,
+  0,
+);
+const newPrivileges = (
+  await db.query(
+    "select proname, has_function_privilege('anon',p.oid,'execute') a from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and proname in ('save_entry','save_record','save_time','record_study')",
+  )
+).rows;
+assert.ok(newPrivileges.every((p) => !p.a));
+await as("authenticated", outsider);
+await assert.rejects(
+  () =>
+    db.query("select save_entry($1,$2,$3)", [
+      writingId,
+      JSON.stringify(writingData),
+      1,
+    ]),
+  /Owner access required/,
+);
+await assert.rejects(
+  () => db.query("select record_study($1,$2)", [notebook, paperId]),
+  /Owner access required/,
+);
+await assert.rejects(
+  () =>
+    db.query("select journal_private.save_record($1,$2,$3,$4)", [
+      writingId,
+      "entry",
+      JSON.stringify(writingData),
+      1,
+    ]),
+  /permission denied/,
+);
+pass(
+  "new operations retain owner isolation and private helpers are inaccessible",
+);
+
 await db.close();
 console.log(
   `\n${checks} database behavior checks passed (real PostgreSQL via PGlite).`,

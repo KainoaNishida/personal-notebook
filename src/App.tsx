@@ -23,8 +23,6 @@ import {
   ArrowLeft,
   Plus,
   Search,
-  Sun,
-  Moon,
   PanelLeft,
   BookOpen,
   CalendarDays,
@@ -32,10 +30,6 @@ import {
   Settings as SettingsIcon,
   LogOut,
   Check,
-  ChevronLeft,
-  ChevronRight,
-  ArrowUp,
-  ArrowDown,
   Archive,
   RotateCcw,
   Download,
@@ -61,13 +55,21 @@ import type {
   AnyRecord,
 } from "./domain";
 import * as api from "./service";
-import { useRecords, useSave, useDraft } from "./hooks";
+import {
+  NotebookIndex,
+  NotebookStream,
+  EntryLabels,
+  TimeLog,
+  TimeHistory,
+  ResearchTimeline,
+} from "./components/JournalViews";
+import { useRecords, useSave, useDraft, useJournalDate } from "./hooks";
 import { DraftStatus } from "./components/DraftStatus";
 import { DailyEntry } from "./components/DailyEntry";
 import { Splitter } from "./components/Splitter";
 import { PaperTitle } from "./components/PaperTitle";
 import { NoteVersions } from "./components/NoteVersions";
-import { themeTokens } from "./theme";
+import { themeTokens, darkBackgrounds } from "./theme";
 import { AuthGate } from "./components/AuthGate";
 import type { EditorHandle } from "./components/Editor";
 import { Empty, ErrorNotice, Modal, SubjectIcon } from "./components/UI";
@@ -105,7 +107,6 @@ export default function App() {
 function Workspace() {
   const route = useLocation();
   const q = useRecords(),
-    save = useSave(),
     [error, setError] = useState(""),
     [search, setSearch] = useState(""),
     [collapsed, setCollapsed] = useState(false);
@@ -119,7 +120,7 @@ function Workspace() {
     .filter((n) => !n.data.archived)
     .sort((a, b) => a.data.order - b.data.order);
   useEffect(() => {
-    document.documentElement.dataset.theme = settings.theme;
+    document.documentElement.dataset.theme = "dark";
     const style = document.documentElement.style;
     const tokens = themeTokens(settings);
     for (const key of [
@@ -145,18 +146,6 @@ function Workspace() {
         .then(() => q.refetch())
         .catch((e) => setError(e.message));
   }, [q.data]);
-  async function theme() {
-    try {
-      await save(
-        "settings",
-        setting?.id || uid(),
-        { ...settings, theme: settings.theme === "dark" ? "light" : "dark" },
-        setting?.revision || 0,
-      );
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
   return (
     <div className={`app-shell ${collapsed ? "collapsed" : ""}`}>
       <aside className="app-sidebar">
@@ -186,10 +175,7 @@ function Workspace() {
           })}
         </nav>
         <div className="sidebar-subhead">
-          <span>NOTEBOOKS</span>
-          <Link to="/notebooks" aria-label="Manage notebooks">
-            <Plus size={15} />
-          </Link>
+          <span>Quick Links</span>
         </div>
         <div className="notebook-nav">
           {ns.map((n) => (
@@ -250,17 +236,6 @@ function Workspace() {
                 </button>
               )}
             </label>
-            <button
-              className="icon-button"
-              aria-label="Toggle color theme"
-              onClick={() => void theme()}
-            >
-              {settings.theme === "dark" ? (
-                <Sun size={17} />
-              ) : (
-                <Moon size={17} />
-              )}
-            </button>
           </div>
         </header>
         {api.demo && (
@@ -294,7 +269,14 @@ function Workspace() {
                 <Today key="today" records={records} settings={settings} />
               }
             />
-            <Route path="/history" element={<Navigate to="/" replace />} />
+            <Route
+              path="/history"
+              element={<TimeHistory records={records} />}
+            />
+            <Route
+              path="/notebooks/:id/pages"
+              element={<NotebookIndex records={records} />}
+            />
             <Route
               path="/notebooks"
               element={<Notebooks records={records} />}
@@ -317,7 +299,7 @@ function Workspace() {
               path="/papers"
               element={
                 <Navigate
-                  to={`/notebooks/${ns.find((n) => n.data.icon === "science")?.id || ""}`}
+                  to={`/notebooks/${ns.find((n) => n.data.research)?.id || ""}`}
                   replace
                 />
               }
@@ -362,7 +344,7 @@ function EntryList({
   return entries.length ? (
     <div className="entry-list">
       {entries
-        .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+        .sort((a, b) => b.data.date.localeCompare(a.data.date))
         .map((e) => {
           const n = ofKind(records, "notebook").find(
             (n) => n.id === e.data.notebookId,
@@ -410,9 +392,8 @@ function Today({
   records: Snapshot;
   settings: Settings;
 }) {
-  const [date, setDate] = useState(today(settings.timezone)),
-    save = useSave(),
-    [error, setError] = useState("");
+  const date = useJournalDate(settings.timezone);
+  const nav = useNavigate();
   const ns = ofKind(records, "notebook")
       .filter((n) => !n.data.archived)
       .sort((a, b) => a.data.order - b.data.order),
@@ -422,60 +403,23 @@ function Today({
       ns.find((n) => n.data.name.toLowerCase() === "life"),
     activities = ofKind(records, "activity");
   const complete = activities.filter(
-    (a) => a.data.date === date && a.data.completed,
+    (a) =>
+      a.data.date === date &&
+      a.data.completed &&
+      ns.some((n) => n.id === a.data.notebookId),
   ).length;
   const days = Array.from({ length: 14 }, (_, i) => shiftDate(date, i - 13));
-  async function toggle(n: RecordItem<"notebook">) {
-    const old = activities.find(
-      (a) => a.data.date === date && a.data.notebookId === n.id,
-    );
-    try {
-      await save(
-        "activity",
-        old?.id || uid(),
-        { date, notebookId: n.id, completed: !old?.data.completed },
-        old?.revision || 0,
-      );
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
   return (
     <main className="page today-page">
-      <div className="row between page-top">
-        <div className="eyebrow">
-          {displayDate(date, {
-            weekday: "long",
-            month: "long",
-            day: "numeric",
-            year: "numeric",
-          }).toUpperCase()}
-        </div>
-        <div className="date-picker">
-          <button
-            aria-label="Previous day"
-            className="icon-button"
-            onClick={() => setDate(shiftDate(date, -1))}
-          >
-            <ChevronLeft size={15} />
-          </button>
-          <input
-            type="date"
-            aria-label="Journal date"
-            value={date}
-            onChange={(e) => e.target.value && setDate(e.target.value)}
-          />
-          <button
-            aria-label="Next day"
-            className="icon-button"
-            onClick={() => setDate(shiftDate(date, 1))}
-          >
-            <ChevronRight size={15} />
-          </button>
-        </div>
-      </div>
-      <h1>Today</h1>
-      <ErrorNotice error={error} />
+      <h1>
+        Today —{" "}
+        {displayDate(date, {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+        })}
+      </h1>
       <div className="section-heading">
         <h2>Goals</h2>
         <span className="small muted">
@@ -498,26 +442,49 @@ function Today({
             >
               <div className="row between">
                 <SubjectIcon name={n.data.icon} size={23} />
-                <button
-                  className="goal-check"
-                  role="checkbox"
-                  aria-checked={checked}
-                  aria-label={`Mark ${n.data.name} complete`}
-                  onClick={() => void toggle(n)}
+                <span
+                  aria-label={checked ? "Completed" : "Write five new words"}
                 >
                   {checked && <Check size={14} />}
-                </button>
+                </span>
               </div>
               <Link to={`/notebooks/${n.id}`}>
                 <h3>{n.data.name}</h3>
               </Link>
               <span className="goal-status">
-                {checked ? "Completed" : "Not marked complete"}
+                {checked ? "Completed" : "Write five new words"}
               </span>
             </div>
           );
         })}
       </div>
+      <section className="productive-time">
+        <div className="section-heading">
+          <h2>Productive time</h2>
+          <Link to="/history">View history</Link>
+        </div>
+        <p>
+          Today:{" "}
+          {Math.floor(
+            activities
+              .filter((a) => a.data.date === date)
+              .reduce((sum, a) => sum + (a.data.minutes || 0), 0) / 60,
+          )}
+          h{" "}
+          {activities
+            .filter((a) => a.data.date === date)
+            .reduce((sum, a) => sum + (a.data.minutes || 0), 0) % 60}
+          m
+        </p>
+        {ns.map((n) => (
+          <TimeLog
+            key={`${n.id}:${date}`}
+            notebook={n}
+            records={records}
+            date={date}
+          />
+        ))}
+      </section>
       <div className="today-columns">
         <section>
           <div className="section-heading">
@@ -546,7 +513,7 @@ function Today({
             {ns.map((n) => (
               <div className="rhythm-row" key={n.id}>
                 <span title={n.data.name} style={{ color: n.data.color }}>
-                  <SubjectIcon name={n.data.icon} size={15} />
+                  <SubjectIcon name={n.data.icon} size={15} /> {n.data.name}
                 </span>
                 {days.map((d) => {
                   const yes = activities.some(
@@ -562,7 +529,9 @@ function Today({
                       aria-label={`${n.data.name}, ${d}: ${yes ? "completed" : "not marked"}`}
                       className={yes ? "rhythm-cell filled" : "rhythm-cell"}
                       style={yes ? { background: "var(--accent)" } : undefined}
-                      onClick={() => setDate(d)}
+                      onClick={() =>
+                        nav(`/notebooks/${n.id}/pages?from=${d}&to=${d}`)
+                      }
                     />
                   );
                 })}
@@ -593,6 +562,7 @@ function Notebooks({ records }: { records: Snapshot }) {
     [open, setOpen] = useState(false),
     [name, setName] = useState(""),
     [description, setDescription] = useState(""),
+    [icon, setIcon] = useState("reading"),
     [error, setError] = useState("");
   const ns = ofKind(records, "notebook").sort(
     (a, b) => a.data.order - b.data.order,
@@ -601,6 +571,7 @@ function Notebooks({ records }: { records: Snapshot }) {
     setEditing(n || null);
     setName(n?.data.name || "");
     setDescription(n?.data.description || "");
+    setIcon(n?.data.icon || "reading");
     setOpen(true);
   }
   async function submit(e: FormEvent) {
@@ -613,11 +584,13 @@ function Notebooks({ records }: { records: Snapshot }) {
           ...(editing?.data || {
             color: "#f59a56",
             icon: "reading",
-            order: ns.length,
+            order: Math.max(-1, ...ns.map((n) => n.data.order)) + 1,
+            research: false,
             archived: false,
           }),
           name: name.trim(),
           description,
+          icon,
         },
         editing?.revision || 0,
       );
@@ -632,13 +605,6 @@ function Notebooks({ records }: { records: Snapshot }) {
     } catch (e) {
       setError((e as Error).message);
     }
-  }
-  async function reorder(n: RecordItem<"notebook">, delta: number) {
-    const i = ns.findIndex((x) => x.id === n.id),
-      other = ns[i + delta];
-    if (!other) return;
-    await update(other, { ...other.data, order: n.data.order });
-    await update(n, { ...n.data, order: other.data.order });
   }
   return (
     <main className="page">
@@ -658,7 +624,7 @@ function Notebooks({ records }: { records: Snapshot }) {
             key={n.id}
             style={{ "--subject": n.data.color } as CSSProperties}
           >
-            <Link to={`/notebooks/${n.id}`}>
+            <Link to={`/notebooks/${n.id}/pages`}>
               <div className="notebook-cover">
                 <SubjectIcon name={n.data.icon} size={35} />
                 <span className="eyebrow">
@@ -685,20 +651,6 @@ function Notebooks({ records }: { records: Snapshot }) {
               </span>
               <div className="row notebook-actions">
                 <button onClick={() => edit(n)}>Edit</button>
-                <button
-                  className="icon-button"
-                  aria-label={`Move ${n.data.name} up`}
-                  onClick={() => void reorder(n, -1)}
-                >
-                  <ArrowUp size={15} />
-                </button>
-                <button
-                  className="icon-button"
-                  aria-label={`Move ${n.data.name} down`}
-                  onClick={() => void reorder(n, 1)}
-                >
-                  <ArrowDown size={15} />
-                </button>
                 <button
                   className="icon-button"
                   aria-label={`${n.data.archived ? "Restore" : "Archive"} ${n.data.name}`}
@@ -741,6 +693,22 @@ function Notebooks({ records }: { records: Snapshot }) {
               onChange={(e) => setDescription(e.target.value)}
             />
           </label>
+          <fieldset className="icon-picker">
+            <legend>Notebook icon</legend>
+            {["reading", "science", "system", "art", "gym", "code", "life"].map(
+              (value) => (
+                <button
+                  type="button"
+                  key={value}
+                  aria-label={`${value} icon`}
+                  aria-pressed={icon === value}
+                  onClick={() => setIcon(value)}
+                >
+                  <SubjectIcon name={value} />
+                </button>
+              ),
+            )}
+          </fieldset>
           <button className="primary" disabled={!name.trim()}>
             Save notebook
           </button>
@@ -757,55 +725,17 @@ function NotebookPage({
   settings: Settings;
 }) {
   const { id } = useParams();
+  const date = useJournalDate(settings.timezone);
   const notebook = ofKind(records, "notebook").find((n) => n.id === id);
-  const [date, setDate] = useState(today(settings.timezone));
   if (!notebook)
     return (
       <Empty title="Notebook not found">
         <Link to="/notebooks">Notebooks</Link>
       </Empty>
     );
-  if (notebook.data.icon === "science") return <Papers records={records} />;
-  const entries = ofKind(records, "entry").filter(
-    (e) => e.data.notebookId === id && !e.data.paperId,
-  );
-  return (
-    <main className="page writing-page">
-      <Link className="back-link" to="/notebooks">
-        <ArrowLeft size={14} />
-        Notebooks
-      </Link>
-      <div className="row between">
-        <h1>{notebook.data.name}</h1>
-        <label className="field">
-          View day
-          <input
-            type="date"
-            aria-label="View notebook day"
-            max={today(settings.timezone)}
-            value={date}
-            onChange={(e) => e.target.value && setDate(e.target.value)}
-          />
-        </label>
-      </div>
-      <DailyEntry
-        key={`${id}:${date}`}
-        records={records}
-        notebook={notebook}
-        date={date}
-      />
-      <details className="previous-entries">
-        <summary>
-          Previous entries ({entries.filter((e) => e.data.date !== date).length}
-          )
-        </summary>
-        <EntryList
-          records={records}
-          entries={entries.filter((e) => e.data.date !== date)}
-        />
-      </details>
-    </main>
-  );
+  if (notebook.data.research)
+    return <Papers records={records} notebook={notebook} />;
+  return <NotebookStream notebook={notebook} records={records} date={date} />;
 }
 function EntryPage({ records }: { records: Snapshot }) {
   const { id } = useParams(),
@@ -816,9 +746,10 @@ function EntryPage({ records }: { records: Snapshot }) {
   if (record?.data.paperId)
     return <Navigate to={`/papers/${record.data.paperId}`} replace />;
   return record && !record.deleted_at ? (
-    <main className="page writing-page">
-      <EntryWriting key={record.id} record={record} records={records} />
-    </main>
+    <Navigate
+      to={`/notebooks/${record.data.notebookId}?entry=${record.id}`}
+      replace
+    />
   ) : (
     <Empty title="Entry not found.">It may be in Trash in Settings.</Empty>
   );
@@ -836,9 +767,6 @@ export function EntryWriting({
     save = useSave(),
     nav = useNavigate(),
     [error, setError] = useState("");
-  const n = ofKind(records, "notebook").find(
-    (n) => n.id === record.data.notebookId,
-  );
   function source(id: string) {
     const a = ofKind(records, "annotation").find((a) => a.id === id);
     if (a) nav(`/papers/${a.data.paperId}?entry=${record.id}&annotation=${id}`);
@@ -870,33 +798,16 @@ export function EntryWriting({
   return (
     <div className="entry-writing">
       {!record.data.paperId && (
-        <div className="row between entry-breadcrumb">
-          <Link
-            to={`/notebooks/${record.data.notebookId}`}
-            className="subject-label"
-            style={{ color: n?.data.color }}
-          >
-            <SubjectIcon name={n?.data.icon} size={15} />
-            {n?.data.name || "Notebook"}
-          </Link>
-          <div className="row">
-            <span className="small muted">
-              {displayDate(draft.value.date, {
-                month: "long",
-                day: "numeric",
-                year: "numeric",
-              })}
-            </span>
-            <button
-              className="icon-button"
-              aria-label="Move entry to trash"
-              onClick={() => void trash()}
-            >
-              <Trash2 size={15} />
-            </button>
-          </div>
-        </div>
+        <details className="section-menu">
+          <summary>Section options</summary>
+          <button onClick={() => void trash()}>Move entry to trash</button>
+        </details>
       )}
+      <EntryLabels
+        value={draft.value}
+        records={records}
+        onChange={draft.change}
+      />
       {!record.data.paperId && (
         <input
           className="entry-title"
@@ -938,7 +849,13 @@ export function EntryWriting({
     </div>
   );
 }
-function Papers({ records }: { records: Snapshot }) {
+function Papers({
+  records,
+  notebook,
+}: {
+  records: Snapshot;
+  notebook: RecordItem<"notebook">;
+}) {
   const save = useSave(),
     input = useRef<HTMLInputElement>(null),
     nav = useNavigate(),
@@ -975,7 +892,7 @@ function Papers({ records }: { records: Snapshot }) {
         pages,
       });
       await client.invalidateQueries({ queryKey: ["records"] });
-      nav("/papers/" + p.id);
+      nav(`/papers/${p.id}?notebook=${notebook.id}`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -1007,34 +924,8 @@ function Papers({ records }: { records: Snapshot }) {
         }}
       />
       <ErrorNotice error={error} />
-      <div className="paper-grid">
-        {ofKind(records, "paper").map((p) => (
-          <Link className="paper-card" to={"/papers/" + p.id} key={p.id}>
-            <div className="paper-illustration">
-              <span>RESEARCH PAPER</span>
-              <div />
-              <div />
-              <div className="short" />
-              <div />
-              <div />
-              <Files size={35} strokeWidth={1} />
-            </div>
-            <div>
-              <span className="eyebrow">{p.data.pages} PAGES</span>
-              <h2>{p.data.title}</h2>
-              <p className="muted small">
-                {
-                  ofKind(records, "entry").filter(
-                    (e) => e.data.paperId === p.id,
-                  ).length
-                }{" "}
-                notes
-              </p>
-            </div>
-            <ArrowUpRight size={18} />
-          </Link>
-        ))}
-      </div>
+      <Link to={`/notebooks/${notebook.id}/pages`}>All papers & labels</Link>
+      <ResearchTimeline records={records} notebookId={notebook.id} />
       {!ofKind(records, "paper").length && (
         <div
           className="upload-zone"
@@ -1087,9 +978,19 @@ function PaperPage({
     annotation = ofKind(records, "annotation").find(
       (a) => a.id === params.get("annotation"),
     );
-  const notebook = ofKind(records, "notebook").find(
-    (n) => n.data.icon === "science",
-  );
+  const notebooks = ofKind(records, "notebook");
+  const notebook =
+    notebooks.find((n) => n.id === entry?.data.notebookId) ||
+    notebooks.find((n) => n.data.research && n.id === params.get("notebook")) ||
+    notebooks.find((n) => n.data.research);
+  const studyDate = useJournalDate(settings.timezone);
+  useEffect(() => {
+    if (notebook && paper)
+      void api
+        .recordStudy(notebook.id, paper.id, studyDate)
+        .then(() => client.invalidateQueries({ queryKey: ["records"] }))
+        .catch((e) => setError(e.message));
+  }, [notebook?.id, paper?.id, studyDate]);
   const [blankId, setBlankId] = useState("");
   useEffect(() => {
     let active = true;
@@ -1199,6 +1100,18 @@ function PaperPage({
           }}
         />
         <section className="science-notes">
+          {notebook && (
+            <details>
+              <summary>Log productive time</summary>
+              <TimeLog
+                key={studyDate}
+                notebook={notebook}
+                records={records}
+                date={studyDate}
+                paperId={paper.id}
+              />
+            </details>
+          )}
           {note && (
             <EntryWriting
               key={note.id}
@@ -1329,12 +1242,21 @@ function SettingsPage({
         <div className="row">
           <label className="field">
             Main color
-            <input
+            <select
               aria-label="Main color"
-              type="color"
-              value={mainColor}
+              value={
+                darkBackgrounds.includes(mainColor)
+                  ? mainColor
+                  : darkBackgrounds[0]
+              }
               onChange={(e) => setMainColor(e.target.value)}
-            />
+            >
+              {darkBackgrounds.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="field">
             Accent color

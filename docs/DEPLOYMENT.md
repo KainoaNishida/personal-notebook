@@ -91,3 +91,14 @@ Record dated evidence and the production URL in `IMPLEMENTATION-STATUS.md`, with
 Budget units are millionths of a dollar; the UTC monthly ceiling is 20,000,000. `ai_requests` preserves idempotency keys, results, actual cost and reservations. Interrupted requests may still bill; review the saved result in the AI panel before issuing a new request. Reconcile unknown charges only after checking provider usage. No automatic billable retries occur.
 
 Previous saved revisions live in `record_versions`. Conflict review displays the saved version before choosing. Each editor has its own local recovery slot, and reload prefers the current window's draft. A successful save clears only matching draft content; other unsaved versions remain available when reopening the note. Explicit sign-out clears all recovery data. Resolve pending drafts before export or trash. This is crash recovery, not offline support. Keep regular private ZIP exports.
+
+
+## Second-iteration rollout
+
+Apply `supabase/migrations/20260926222912_second_iteration.sql` before publishing the frontend. This migration is additive: it retains record IDs, revisions, consolidated originals, source assets and owner policies. It adds notebook labels, study days, productive minutes and atomic saved-word progress. Do not backfill historical word counts or productive minutes. The prior journal-workflow migration is recorded remotely as `20260923203928_journal_workflow`, corresponding to local `20260923201135_journal_workflow.sql`; do not replay it merely to reconcile the timestamp.
+
+The canonical production domain must reach the journal's password screen without a Vercel session. In the existing commonplace project, use **Standard Protection**, which excludes production domains while continuing to protect preview deployments. Confirm the production-domain assignment in Domains; do not substitute a generated deployment URL or disable preview protection globally. See [Vercel deployment protection](https://vercel.com/docs/deployment-protection). If the domain changes, update Supabase's recovery redirect allowlist and the Edge Function's exact `APP_ORIGIN` together.
+
+Anonymous API checks: `node scripts/check-hosted-access.mjs` reads the ignored public-client configuration. It must deny record reads, all write/tracking RPCs and AI access, expose no private files, and confirm signup/anonymous sign-in remain disabled. Non-owner authorization is exercised by the PostgreSQL regression harness.
+
+Security advisors flag the intentionally owner-checked `SECURITY DEFINER` RPCs and deny-all `app_owner`/`ai_months` tables. These are deliberate boundaries, verified by the database tests, rather than reasons to grant broader access. The existing [leaked-password protection advisory](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) is a separate Auth configuration item; this change does not upgrade the free project.

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "./service";
+import { today, ofKind } from "./domain";
 import type { AnyRecord, DataMap, Kind, RecordItem, Snapshot } from "./domain";
 
 // Postgres JSONB can reorder object keys. Compare values, not serialization order.
@@ -51,6 +52,10 @@ function readRecovery<K extends "entry" | "day">(record: RecordItem<K>) {
             data: parsed.data as DataMap[K],
             revision: parsed.revision as number,
             updatedAt: Number(parsed.updatedAt) || 0,
+            writingDate:
+              typeof parsed.writingDate === "string"
+                ? parsed.writingDate
+                : undefined,
           };
         } catch {
           return null;
@@ -85,18 +90,35 @@ export function useSave() {
       data: DataMap[K],
       revision = 0,
       deletedAt: string | null = null,
+      writingDate?: string,
     ) => {
-      const next = await api.save(kind, id, data, revision, deletedAt);
+      const next = await api.save(
+        kind,
+        id,
+        data,
+        revision,
+        deletedAt,
+        writingDate,
+      );
       q.setQueryData<Snapshot>(["records"], (old) => [
         ...(old || []).filter((r) => r.id !== id),
         next as AnyRecord,
       ]);
+      if (kind === "entry") void q.invalidateQueries({ queryKey: ["records"] });
       return next;
     },
     [q],
   );
 }
 export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
+  const queryClient = useQueryClient();
+  const currentDay = () =>
+    today(
+      ofKind(
+        queryClient.getQueryData<Snapshot>(["records"]) || [],
+        "settings",
+      )[0]?.data.timezone,
+    );
   const save = useSave(),
     [recovery] = useState(() => ({
       key: api.recoveryPrefix + record.id + ":" + crypto.randomUUID(),
@@ -109,11 +131,19 @@ export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
     [conflict, setConflict] = useState<AnyRecord | null>(null),
     [error, setError] = useState(""),
     [recoveryNotice, setRecoveryNotice] = useState("");
+  const writingDate = useRef(recovery.draft?.writingDate || currentDay());
+  const changedAt = useRef(0),
+    dirtySince = useRef(0);
   const persist = useCallback(
     (data: DataMap[K], revision: number) => {
       localStorage.setItem(
         recovery.key,
-        JSON.stringify({ data, revision, updatedAt: Date.now() }),
+        JSON.stringify({
+          data,
+          revision,
+          writingDate: writingDate.current,
+          updatedAt: Date.now(),
+        }),
       );
       // Remember this window's slot across reloads; localStorage slots are unique
       // to editor instances so other windows never overwrite its unsaved text.
@@ -158,6 +188,8 @@ export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
           s.record.id,
           data,
           s.record.revision,
+          null,
+          writingDate.current,
         );
         s.record = saved;
         s.dirty = s.value !== data;
@@ -225,8 +257,10 @@ export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
       }
     }
     const t = setInterval(() => {
-      void flush();
-    }, 800);
+      const now = Date.now();
+      if (now - changedAt.current >= 800 || now - dirtySince.current >= 5000)
+        void flush();
+    }, 200);
     const before = (e: BeforeUnloadEvent) => {
       if (latest.current.dirty) {
         e.preventDefault();
@@ -250,6 +284,11 @@ export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
     }
   }, [record]);
   const change = (data: DataMap[K]) => {
+    if (!latest.current.dirty) {
+      writingDate.current = currentDay();
+      dirtySince.current = Date.now();
+    }
+    changedAt.current = Date.now();
     latest.current.value = data;
     latest.current.dirty = true;
     setValue(data);
@@ -292,6 +331,7 @@ export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
       remainingRecovery();
       return;
     }
+    writingDate.current = next.writingDate || currentDay();
     latest.current.value = next.data;
     latest.current.dirty = true;
     latest.current.conflict = true;
@@ -314,4 +354,21 @@ export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
     reviewRecovery,
     flush,
   };
+}
+
+export function useJournalDate(timezone: string) {
+  const [date, setDate] = useState(() => today(timezone));
+  useEffect(() => {
+    const update = () => setDate(today(timezone));
+    update();
+    const timer = setInterval(update, 1000);
+    window.addEventListener("focus", update);
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", update);
+      document.removeEventListener("visibilitychange", update);
+    };
+  }, [timezone]);
+  return date;
 }

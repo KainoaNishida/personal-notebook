@@ -67,3 +67,8 @@ Playwright covers manual goals, Markdown, images, diagrams, undo, search, notebo
 - AI output remains editable and reviewable. One uninserted follow-up used an unstated assumption in a numerical illustration, and another had literal newline escapes. The inserted explanation and diagram passed the stated attention-equation checks; this is not a general correctness guarantee.
 
 Portfolio pull-request integration remains the immediate next milestone. The first-post draft is unpublished and no portfolio files were changed.
+
+
+## Second iteration
+
+The approved second iteration supersedes earlier manual-goal, light-theme, date-picker and paper-grid behavior. See [second-iteration implementation and verification](SECOND-ITERATION.md) for the current contract and rollout evidence.

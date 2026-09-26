@@ -1,3 +1,4 @@
+import { bodyWords, addedWords, normalizeLabel } from "./progress";
 import { createClient } from "@supabase/supabase-js";
 import type { Session } from "@supabase/supabase-js";
 import {
@@ -111,7 +112,17 @@ export async function signOut() {
 }
 export async function list(): Promise<Snapshot> {
   if (demo) {
-    const s = preview();
+    const s = preview().map((r) =>
+      r.kind === "notebook"
+        ? {
+            ...r,
+            data: {
+              ...r.data,
+              research: r.data.research ?? r.data.icon === "science",
+            },
+          }
+        : r,
+    );
     localStorage.setItem(previewKey, JSON.stringify(s));
     return s;
   }
@@ -136,6 +147,7 @@ export async function save<K extends Kind>(
   data: DataMap[K],
   revision = 0,
   deletedAt: string | null = null,
+  writingDate?: string,
 ): Promise<RecordItem<K>> {
   if (demo) {
     const all = preview(),
@@ -157,6 +169,49 @@ export async function save<K extends Kind>(
       if (prior) throw new ConflictError(prior);
     }
     if (old && old.revision !== revision) throw new ConflictError(old);
+    if (kind === "label") {
+      const label = data as DataMap["label"];
+      if (
+        !normalizeLabel(label.name) ||
+        all.some(
+          (r) =>
+            r.kind === "label" &&
+            r.id !== id &&
+            !r.deleted_at &&
+            r.data.notebookId === label.notebookId &&
+            normalizeLabel(r.data.name) === normalizeLabel(label.name),
+        )
+      )
+        throw new Error("Label names must be unique within a notebook.");
+    }
+    if (kind === "entry") {
+      const entry = data as DataMap["entry"];
+      if (
+        entry.labelIds?.some(
+          (labelId) =>
+            !all.some(
+              (r) =>
+                r.id === labelId &&
+                r.kind === "label" &&
+                r.data.notebookId === entry.notebookId,
+            ),
+        )
+      )
+        throw new Error("Label belongs to another notebook.");
+    }
+    if (kind === "activity") {
+      const activity = data as DataMap["activity"];
+      if (
+        !Number.isInteger(activity.minutes ?? 0) ||
+        (activity.minutes ?? 0) < 0 ||
+        (activity.minutes ?? 0) > 1440
+      )
+        throw new Error("Minutes must be an integer from 0 to 1440.");
+      data = {
+        ...activity,
+        completed: old?.kind === "activity" ? old.data.completed : false,
+      } as DataMap[K];
+    }
     const next = {
       id,
       kind,
@@ -167,18 +222,103 @@ export async function save<K extends Kind>(
     } as RecordItem<K>;
     if (i < 0) all.push(next as AnyRecord);
     else all[i] = next as AnyRecord;
+    if (kind === "entry" && !deletedAt && !old?.deleted_at) {
+      const entry = data as DataMap["entry"];
+      const before = old?.kind === "entry" ? old.data.markdown : "";
+      if (before !== entry.markdown) {
+        const date =
+          writingDate ||
+          today(all.find((r) => r.kind === "settings")?.data.timezone);
+        let progress = all.find(
+          (r): r is RecordItem<"writing_progress"> =>
+            r.kind === "writing_progress" &&
+            r.data.entryId === id &&
+            r.data.date === date,
+        );
+        if (!progress) {
+          progress = previewRecord("writing_progress", {
+            entryId: id,
+            notebookId: entry.notebookId,
+            date,
+            baseline: bodyWords(before),
+            maxAdded: 0,
+          });
+          all.push(progress);
+        }
+        progress.data.maxAdded = Math.max(
+          progress.data.maxAdded,
+          addedWords(progress.data.baseline, entry.markdown),
+        );
+        const total = all.reduce(
+          (sum, r) =>
+            sum +
+            (r.kind === "writing_progress" &&
+            r.data.notebookId === entry.notebookId &&
+            r.data.date === date
+              ? r.data.maxAdded
+              : 0),
+          0,
+        );
+        if (total >= 5) {
+          let activity = all.find(
+            (r): r is RecordItem<"activity"> =>
+              r.kind === "activity" &&
+              r.data.notebookId === entry.notebookId &&
+              r.data.date === date,
+          );
+          if (!activity) {
+            activity = previewRecord("activity", {
+              notebookId: entry.notebookId,
+              date,
+              minutes: 0,
+              completed: false,
+            });
+            all.push(activity);
+          }
+          if (!activity.data.completed) {
+            activity.data = {
+              ...activity.data,
+              completed: true,
+              provenance: "writing",
+              completedAt: new Date().toISOString(),
+            };
+            activity.revision++;
+          }
+        }
+        if (entry.paperId)
+          addPreviewStudy(
+            all,
+            entry.notebookId,
+            entry.paperId,
+            date,
+            "writing",
+          );
+      }
+    }
     localStorage.setItem(previewKey, JSON.stringify(all));
     return next;
   }
   if (!supabase) throw new Error("Backend is not configured.");
   const result = check(
-    await supabase.rpc("save_record", {
-      p_id: id,
-      p_kind: kind,
-      p_data: data,
-      p_revision: revision,
-      p_deleted_at: deletedAt,
-    }),
+    await supabase.rpc(
+      kind === "entry" && !deletedAt && writingDate
+        ? "save_entry"
+        : "save_record",
+      kind === "entry" && !deletedAt && writingDate
+        ? {
+            p_id: id,
+            p_data: data,
+            p_revision: revision,
+            p_writing_date: writingDate,
+          }
+        : {
+            p_id: id,
+            p_kind: kind,
+            p_data: data,
+            p_revision: revision,
+            p_deleted_at: deletedAt,
+          },
+    ),
   );
   if (result.conflict) throw new ConflictError(result.record);
   return result.record as RecordItem<K>;
@@ -331,13 +471,31 @@ export async function restoreBatch(records: Snapshot) {
           if (
             prior.data.markdown !== incoming.markdown &&
             incoming.markdown.trim()
-          )
-            prior.data.markdown +=
+          ) {
+            const appended =
               "\n\n---\n\n## Restored notes\n\n" + incoming.markdown;
+            for (const progress of all)
+              if (
+                progress.kind === "writing_progress" &&
+                progress.data.entryId === prior.id
+              )
+                progress.data.baseline.push(...bodyWords(appended));
+            prior.data.markdown += appended;
+          }
           prior.revision++;
           record.data.mergedInto = prior.id;
         }
       }
+      if (
+        record.kind === "study" &&
+        all.some(
+          (r) =>
+            r.kind === "study" &&
+            r.data.paperId === record.data.paperId &&
+            r.data.date === record.data.date,
+        )
+      )
+        continue;
       all.push(record);
     }
     localStorage.setItem(previewKey, JSON.stringify(all));
@@ -382,4 +540,102 @@ export async function generationHistory(
     .limit(20);
   if (annotationId) q = q.eq("annotation_id", annotationId);
   return check(await q) as GenerationRecord[];
+}
+
+function previewRecord<K extends Kind>(
+  kind: K,
+  data: DataMap[K],
+): RecordItem<K> {
+  return {
+    id: uid(),
+    kind,
+    data,
+    revision: 1,
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+  };
+}
+function addPreviewStudy(
+  all: Snapshot,
+  notebookId: string,
+  paperId: string,
+  date: string,
+  source: DataMap["study"]["source"],
+) {
+  if (
+    !all.some(
+      (r) =>
+        r.kind === "study" &&
+        r.data.paperId === paperId &&
+        r.data.date === date,
+    )
+  )
+    all.push(previewRecord("study", { notebookId, paperId, date, source }));
+}
+export async function recordStudy(
+  notebookId: string,
+  paperId: string,
+  date: string,
+) {
+  if (demo) {
+    const all = preview();
+    addPreviewStudy(all, notebookId, paperId, date, "visit");
+    localStorage.setItem(previewKey, JSON.stringify(all));
+    return;
+  }
+  if (!supabase) throw new Error("Backend is not configured.");
+  check(
+    await supabase.rpc("record_study", {
+      p_notebook: notebookId,
+      p_paper: paperId,
+      p_date: date,
+    }),
+  );
+}
+export async function saveTime(
+  notebookId: string,
+  date: string,
+  minutes: number,
+  old?: RecordItem<"activity">,
+  paperId?: string,
+) {
+  if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440)
+    throw new Error("Enter between 0 and 24 hours.");
+  if (demo) {
+    const all = preview();
+    const prior = all.find(
+      (r) =>
+        r.kind === "activity" &&
+        r.data.notebookId === notebookId &&
+        r.data.date === date,
+    );
+    if (prior && prior.id !== old?.id) throw new ConflictError(prior);
+    const next = await save(
+      "activity",
+      old?.id || uid(),
+      {
+        ...old?.data,
+        notebookId,
+        date,
+        minutes,
+        completed: old?.data.completed || false,
+      },
+      old?.revision || 0,
+    );
+    if (paperId) await recordStudy(notebookId, paperId, date);
+    return next;
+  }
+  if (!supabase) throw new Error("Backend is not configured.");
+  const result = check(
+    await supabase.rpc("save_time", {
+      p_id: old?.id || uid(),
+      p_notebook: notebookId,
+      p_date: date,
+      p_minutes: minutes,
+      p_revision: old?.revision || 0,
+      p_paper: paperId || null,
+    }),
+  );
+  if (result.conflict) throw new ConflictError(result.record);
+  return result.record as RecordItem<"activity">;
 }

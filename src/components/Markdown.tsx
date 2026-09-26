@@ -25,11 +25,13 @@ export function AssetImage({
   alt,
   records,
   presentation,
+  onCaption,
 }: {
   id: string;
   alt?: string;
   records: Snapshot;
   presentation?: ImagePresentation;
+  onCaption?: (caption: string) => void;
 }) {
   const asset = ofKind(records, "asset").find((r) => r.id === id);
   const query = useQuery({
@@ -45,6 +47,7 @@ export function AssetImage({
     setUrl(u);
     return () => URL.revokeObjectURL(u);
   }, [query.data]);
+  const caption = alt === asset?.data.name ? "" : alt || "";
   return url ? (
     <span
       className="asset-image"
@@ -64,8 +67,26 @@ export function AssetImage({
           : undefined
       }
     >
-      <img src={url} alt={alt || asset?.data.name || "Reference image"} />
-      {alt && <span className="image-caption">{alt}</span>}
+      <img src={url} alt={caption || "Reference image"} />
+      {onCaption ? (
+        <input
+          className="image-caption"
+          aria-label="Image caption"
+          placeholder="Add a caption…"
+          defaultValue={caption}
+          onBlur={(e) => {
+            if (e.target.value !== caption) onCaption(e.target.value);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.currentTarget.blur();
+            }
+          }}
+        />
+      ) : (
+        caption && <span className="image-caption">{caption}</span>
+      )}
     </span>
   ) : (
     <span className="muted">
@@ -220,11 +241,13 @@ export function Markdown({
   records = [],
   onAnnotation,
   imagePresentation = {},
+  onCaption,
 }: {
   text: string;
   records?: Snapshot;
   onAnnotation?: (id: string) => void;
   imagePresentation?: Record<string, ImagePresentation>;
+  onCaption?: (start: number, end: number, caption: string) => void;
 }) {
   return (
     <div className="markdown">
@@ -253,13 +276,23 @@ export function Markdown({
                 {children}
               </a>
             ),
-          img: ({ src, alt }) =>
+          img: ({ src, alt, node }) =>
             typeof src === "string" && src.startsWith("asset:") ? (
               <AssetImage
                 id={src.slice(6)}
                 alt={alt}
                 records={records}
                 presentation={imagePresentation[src.slice(6)]}
+                onCaption={
+                  onCaption && node?.position
+                    ? (caption) =>
+                        onCaption(
+                          node.position!.start.offset!,
+                          node.position!.end.offset!,
+                          caption,
+                        )
+                    : undefined
+                }
               />
             ) : (
               <span className="muted">

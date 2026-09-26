@@ -13,6 +13,7 @@ const schemas: Record<string, z.ZodType> = {
     icon: z.string(),
     order: z.number(),
     archived: z.boolean(),
+    research: z.boolean().optional(),
   }),
   entry: z.object({
     title: z.string(),
@@ -21,13 +22,39 @@ const schemas: Record<string, z.ZodType> = {
     notebookId: id,
     paperId: id.optional(),
     mergedInto: id.optional(),
+    labelIds: z.array(id).optional(),
   }),
   day: z.object({
     date,
     markdown: z.string().max(1000000),
     migratedTo: id.optional(),
   }),
-  activity: z.object({ date, notebookId: id, completed: z.boolean() }),
+  activity: z.object({
+    date,
+    notebookId: id,
+    completed: z.boolean(),
+    minutes: z.number().int().min(0).max(1440).optional(),
+    provenance: z.enum(["manual", "writing"]).optional(),
+    completedAt: z.string().optional(),
+  }),
+  label: z.object({
+    notebookId: id,
+    name: z.string().min(1).max(80),
+    color: z.string().regex(/^#[\da-fA-F]{6}$/),
+  }),
+  writing_progress: z.object({
+    entryId: id,
+    notebookId: id,
+    date,
+    baseline: z.array(z.string()),
+    maxAdded: z.number().int().nonnegative(),
+  }),
+  study: z.object({
+    notebookId: id,
+    paperId: id,
+    date,
+    source: z.enum(["writing", "time", "visit", "history"]),
+  }),
   paper: z.object({
     title: z.string(),
     assetId: id,
@@ -86,7 +113,10 @@ const envelope = z.object({
 });
 export function validateManifest(input: unknown): Snapshot {
   const parsed = z
-    .object({ version: z.literal(1), records: z.array(envelope).max(20000) })
+    .object({
+      version: z.union([z.literal(1), z.literal(2)]),
+      records: z.array(envelope).max(20000),
+    })
     .parse(input);
   const ids = new Set<string>();
   for (const r of parsed.records) {
@@ -104,10 +134,21 @@ export function validateManifest(input: unknown): Snapshot {
       assetId: "asset",
       imageAssetId: "asset",
       annotationId: "annotation",
+      entryId: "entry",
     })) {
       if (data[key] && byId.get(String(data[key]))?.kind !== kind)
         throw new Error(`Archive has an unresolved ${key}.`);
     }
+    if (
+      r.kind === "entry" &&
+      r.data.labelIds?.some((labelId) => {
+        const label = byId.get(labelId);
+        return (
+          label?.kind !== "label" || label.data.notebookId !== r.data.notebookId
+        );
+      })
+    )
+      throw new Error("Archive has an invalid notebook label.");
     if ("markdown" in data) {
       for (const m of String(data.markdown).matchAll(
         /(?:asset|annotation):([\w-]+)/g,
@@ -134,9 +175,12 @@ export function remapReferences(
       "mergedInto",
       "migratedTo",
       "lifeNotebookId",
+      "entryId",
     ])
       if (typeof data[key] === "string")
         data[key] = mapping.get(data[key] as string) || data[key];
+    if (Array.isArray(data.labelIds))
+      data.labelIds = data.labelIds.map((v) => mapping.get(String(v)) || v);
     if (typeof data.markdown === "string")
       data.markdown = data.markdown.replace(
         /(asset|annotation):([\w-]+)/g,
@@ -181,7 +225,7 @@ export async function exportArchive(records: Snapshot) {
     "manifest.json",
     JSON.stringify(
       {
-        version: 1,
+        version: 2,
         exportedAt: new Date().toISOString(),
         records: exportRecords,
       },

@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   useImperativeHandle,
@@ -14,6 +15,7 @@ import {
   StateField,
   Compartment,
   Annotation,
+  Transaction,
 } from "@codemirror/state";
 import {
   EditorView,
@@ -25,7 +27,7 @@ import {
 } from "@codemirror/view";
 import type { DecorationSet } from "@codemirror/view";
 import { languages } from "@codemirror/language-data";
-import { indentWithTab } from "@codemirror/commands";
+import { indentWithTab, isolateHistory } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import {
@@ -43,20 +45,32 @@ type Context = {
 const externalUpdate = Annotation.define<boolean>();
 class PreviewWidget extends WidgetType {
   root?: Root;
+  resize?: ResizeObserver;
   constructor(
     readonly text: string,
     readonly context: Context,
+    readonly from: number,
   ) {
     super();
   }
+  get assetKey() {
+    return this.context.records
+      .filter((r) => this.text.includes(`asset:${r.id}`))
+      .map((r) => `${r.id}:${r.revision}`)
+      .join("|");
+  }
   eq(other: PreviewWidget) {
     return (
-      other.text === this.text && other.context.records === this.context.records
+      other.text === this.text &&
+      other.assetKey === this.assetKey &&
+      other.from === this.from
     );
   }
-  toDOM() {
+  toDOM(view: EditorView) {
     const el = document.createElement("div");
     el.className = "live-block";
+    this.resize = new ResizeObserver(() => view.requestMeasure());
+    this.resize.observe(el);
     this.root = createRoot(el);
     this.root.render(
       <QueryClientProvider client={this.context.client}>
@@ -64,12 +78,33 @@ class PreviewWidget extends WidgetType {
           text={this.text}
           records={this.context.records}
           onAnnotation={this.context.onAnnotation}
+          onCaption={(start, end, caption) => {
+            if (
+              view.state.sliceDoc(this.from, this.from + this.text.length) !==
+              this.text
+            )
+              return;
+            const source = this.text.slice(start, end);
+            const next = source.replace(
+              /^!\[(?:\\.|[^\]])*\]/,
+              () =>
+                `![${caption.replace(/[\\[\]]/g, "\\$&").replace(/\n/g, " ")}]`,
+            );
+            view.dispatch({
+              changes: {
+                from: this.from + start,
+                to: this.from + end,
+                insert: next,
+              },
+            });
+          }}
         />
       </QueryClientProvider>,
     );
     return el;
   }
   destroy() {
+    this.resize?.disconnect();
     const root = this.root;
     queueMicrotask(() => root?.unmount());
   }
@@ -126,14 +161,19 @@ export function previewRanges(
 function livePreview(context: Context) {
   return StateField.define<DecorationSet>({
     create: build,
-    update: (_v, tr) => build(tr.state),
+    update: (value, tr) =>
+      tr.docChanged || tr.selection ? build(tr.state) : value,
     provide: (f) => EditorView.decorations.from(f),
   });
   function build(state: EditorState) {
     return Decoration.set(
       previewRanges(state).map((r) =>
         Decoration.replace({
-          widget: new PreviewWidget(state.sliceDoc(r.from, r.to), context),
+          widget: new PreviewWidget(
+            state.sliceDoc(r.from, r.to),
+            context,
+            r.from,
+          ),
           block: true,
         }).range(r.from, r.to),
       ),
@@ -169,13 +209,31 @@ export const Editor = forwardRef<
   const host = useRef<HTMLDivElement>(null),
     view = useRef<EditorView | null>(null),
     config = useRef(new Compartment()),
-    callbacks = useRef({ onChange, onUpload }),
+    callbacks = useRef({ onChange, onUpload, onAnnotation }),
+    uploadAnchor = useRef<{ from: number; to: number } | null>(null),
     input = useRef<HTMLInputElement>(null);
   const client = useQueryClient(),
     [source, setSource] = useState(false),
     [error, setError] = useState(""),
     [uploading, setUploading] = useState(false);
-  callbacks.current = { onChange, onUpload };
+  callbacks.current = { onChange, onUpload, onAnnotation };
+  const assetKey = records
+    .filter((r) => r.kind === "asset")
+    .map((r) => `${r.id}:${r.revision}`)
+    .sort()
+    .join("|");
+  const assets = useMemo(
+    () => records.filter((r) => r.kind === "asset"),
+    [assetKey],
+  );
+  const context = useMemo(
+    () => ({
+      records: assets,
+      client,
+      onAnnotation: (id: string) => callbacks.current.onAnnotation?.(id),
+    }),
+    [assets, client],
+  );
   const insert = (text: string) => {
     const v = view.current;
     if (v) {
@@ -190,14 +248,32 @@ export const Editor = forwardRef<
   useImperativeHandle(ref, () => ({ insert }));
   const handleFile = async (file: File) => {
     if (!callbacks.current.onUpload) return;
+    if (uploadAnchor.current) {
+      setError("Wait for the current image upload before adding another.");
+      return;
+    }
+    const editor = view.current;
+    if (!editor) return;
+    uploadAnchor.current = {
+      from: editor.state.selection.main.from,
+      to: editor.state.selection.main.to,
+    };
     setUploading(true);
     setError("");
     try {
       const id = await callbacks.current.onUpload(file);
-      insert(`\n![${file.name.replace(/[\[\]\\]/g, "")}](asset:${id})\n`);
+      const at = uploadAnchor.current;
+      if (at && view.current === editor) {
+        const text = `\n![](asset:${id})\n`;
+        editor.dispatch({
+          changes: { ...at, insert: text },
+          annotations: isolateHistory.of("full"),
+        });
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      uploadAnchor.current = null;
       setUploading(false);
     }
   };
@@ -220,8 +296,20 @@ export const Editor = forwardRef<
             "aria-label": label,
             spellcheck: "true",
           }),
-          config.current.of(livePreview({ records, onAnnotation, client })),
+          config.current.of(livePreview(context)),
           EditorView.updateListener.of((u) => {
+            if (u.docChanged && uploadAnchor.current) {
+              const at = uploadAnchor.current;
+              let touched = false;
+              u.changes.iterChangedRanges((from, to) => {
+                if (from < at.to && to > at.from) touched = true;
+              });
+              const from = u.changes.mapPos(at.from, 1);
+              uploadAnchor.current = {
+                from,
+                to: touched ? from : u.changes.mapPos(at.to, 1),
+              };
+            }
             if (
               u.docChanged &&
               !u.transactions.some((t) => t.annotation(externalUpdate))
@@ -260,25 +348,23 @@ export const Editor = forwardRef<
     const v = view.current;
     if (v && value !== v.state.doc.toString())
       v.dispatch({
-        changes: { from: 0, to: v.state.doc.length, insert: value },
-        annotations: externalUpdate.of(true),
+        changes: minimalChange(v.state.doc.toString(), value),
+        annotations: [
+          externalUpdate.of(true),
+          Transaction.addToHistory.of(false),
+        ],
       });
   }, [value]);
   useEffect(() => {
     view.current?.dispatch({
-      effects: config.current.reconfigure(
-        source ? [] : livePreview({ records, onAnnotation, client }),
-      ),
+      effects: config.current.reconfigure(source ? [] : livePreview(context)),
     });
-  }, [source, records, onAnnotation, client]);
+  }, [source, context]);
   return (
     <div
       className={`editor ${compact ? "compact" : ""} ${source ? "source-mode" : ""}`}
     >
       <div className="editor-toolbar">
-        <span className="eyebrow">
-          {source ? "Markdown source" : "Live preview"}
-        </span>
         <div className="row">
           {onUpload && (
             <button
@@ -315,3 +401,16 @@ export const Editor = forwardRef<
     </div>
   );
 });
+
+// One bounded replacement preserves positions outside the actual remote change.
+export function minimalChange(before: string, after: string) {
+  let from = 0,
+    a = before.length,
+    b = after.length;
+  while (from < a && from < b && before[from] === after[from]) from++;
+  while (a > from && b > from && before[a - 1] === after[b - 1]) {
+    a--;
+    b--;
+  }
+  return { from, to: a, insert: after.slice(from, b) };
+}
