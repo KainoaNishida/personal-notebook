@@ -69,7 +69,7 @@ Supabase supplies `SUPABASE_URL` and `SUPABASE_SECRET_KEYS` (JSON map, `default`
 
 ## 4. Vercel Hobby
 
-The checkout is linked to `kainoa-nishidas-projects/commonplace`, deployed at https://commonplace-kainoa-nishidas-projects.vercel.app . It uses Vite, Node 24, `npm run build`, output `dist`. `vercel.json` supplies routing and response headers. `.vercelignore` permits only application/build inputs; use `vercel deploy --dry --json` to inspect the upload before deploying changes. No paid resource is required.
+The checkout is linked to `kainoa-nishidas-projects/commonplace`, deployed at https://commonplace-ashy.vercel.app . It uses Vite, Node 24, `npm run build`, output `dist`. `vercel.json` supplies routing and response headers. `.vercelignore` permits only application/build inputs; use `vercel deploy --dry --json` to inspect the upload before deploying changes. No paid resource is required.
 
 Set the four public frontend variables above in Vercel. Redeploy after changing them; Vite bakes them into its bundle. Gemini and service-role secrets belong only in Supabase. Set Supabase Auth Site URL and the function's `APP_ORIGIN` to the production origin.
 
@@ -102,3 +102,9 @@ The canonical production domain must reach the journal's password screen without
 Anonymous API checks: `node scripts/check-hosted-access.mjs` reads the ignored public-client configuration. It must deny record reads, all write/tracking RPCs and AI access, expose no private files, and confirm signup/anonymous sign-in remain disabled. Non-owner authorization is exercised by the PostgreSQL regression harness.
 
 Security advisors flag the intentionally owner-checked `SECURITY DEFINER` RPCs and deny-all `app_owner`/`ai_months` tables. These are deliberate boundaries, verified by the database tests, rather than reasons to grant broader access. The existing [leaked-password protection advisory](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) is a separate Auth configuration item; this change does not upgrade the free project.
+
+### Hosted access verification — September 26, 2026
+
+The Vercel Domains page identifies `https://commonplace-ashy.vercel.app` as the production domain. A request without cookies returns HTTP 200 and the browser renders the journal password gate. Standard Protection is already enabled; the generated deployment URL still redirects anonymous requests to Vercel authentication. The previously documented team alias is a protected preview alias, not the canonical production domain.
+
+The project is now connected to `KainoaNishida/personal-notebook`. Before this connection, production served commit `63583e5`; pushing to GitHub alone did not deploy the second-iteration changes. Confirm the deployed commit after the next push. Recovery redirect allowlisting and the Edge Function `APP_ORIGIN` still require verification against the canonical production origin.
