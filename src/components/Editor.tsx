@@ -23,7 +23,6 @@ import {
   WidgetType,
   keymap,
   placeholder,
-  drawSelection,
 } from "@codemirror/view";
 import type { DecorationSet } from "@codemirror/view";
 import { languages } from "@codemirror/language-data";
@@ -241,6 +240,8 @@ export const Editor = forwardRef<
       v.dispatch({
         changes: { from: at.from, to: at.to, insert: text },
         selection: { anchor: at.from + text.length },
+        scrollIntoView: true,
+        annotations: isolateHistory.of("full"),
       });
       v.focus();
     }
@@ -288,7 +289,8 @@ export const Editor = forwardRef<
           markdown({ codeLanguages: languages }),
           history(),
           keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
-          drawSelection(),
+          // Use the browser's caret and selection. A separately positioned
+          // overlay can lag behind asynchronous preview layout and pane changes.
           syntaxHighlighting(defaultHighlightStyle),
           EditorView.lineWrapping,
           placeholder(compact ? "Write a reflection…" : "Write a note…"),

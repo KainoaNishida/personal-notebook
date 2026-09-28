@@ -393,8 +393,7 @@ test("label creation, filtering, editing and shared color controls", async ({
     .fill("Filtered page");
   await page.getByRole("button", { name: "Edit Markdown source" }).click();
   await page.locator(".cm-content").fill("Five new words are here");
-  await page.getByRole("button", { name: "Add labels", exact: true }).click();
-  await page.getByRole("button", { name: "Create a label" }).click();
+  await page.getByRole("button", { name: "Add label", exact: true }).click();
   await page.getByRole("textbox", { name: "Label name" }).fill("Theory");
   await page.getByRole("textbox", { name: "Label color hex" }).fill("#bad");
   await expect(
@@ -407,7 +406,17 @@ test("label creation, filtering, editing and shared color controls", async ({
   await expect(
     page.getByRole("button", { name: "Theory", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "Theory", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Theory", exact: true }),
+  ).toHaveAttribute("aria-pressed", "false");
+  await page
+    .getByRole("button", { name: "Theory", exact: true })
+    .press("Space");
+  await expect(
+    page.getByRole("button", { name: "Theory", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("Saved", { exact: true })).toBeVisible();
   await expect(page.locator(".cm-content")).toContainText("Five new words");
   await page.getByRole("link", { name: "All pages", exact: true }).click();
@@ -465,11 +474,11 @@ test("label creation, filtering, editing and shared color controls", async ({
     .click();
   await expect(page.locator(".index-entry")).toHaveCount(1);
   await page.goto("/notebooks/00000000-0000-4000-8000-000000000003");
-  await page.getByRole("button", { name: "Add labels", exact: true }).click();
+  await page.getByRole("button", { name: "Add label", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Foundations", exact: true }),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await page.goto("/settings");
   await page.getByRole("textbox", { name: "Accent color hex" }).fill("invalid");
   await expect(
@@ -727,4 +736,219 @@ test("daily writing rolls over at midnight without moving the prior day's text",
   await expect(page.locator(".cm-content")).toContainText(
     "This belongs to the previous day.",
   );
+});
+
+test("research caret stays at the insertion point through source links and pane changes", async ({
+  page,
+}) => {
+  await page.clock.install({ time: new Date("2026-09-28T18:00:00Z") });
+  await page.goto("/papers");
+  await page.locator("input[type=file]").setInputFiles({
+    name: "cursor-study.pdf",
+    mimeType: "application/pdf",
+    buffer: pdf(),
+  });
+  await page.getByRole("button", { name: "Edit Markdown source" }).click();
+  const editor = page.locator(".cm-content");
+  await editor.fill(
+    Array.from(
+      { length: 8 },
+      (_, i) =>
+        `## Section ${i}\n\n$$\n\\frac{x^2}{\\sqrt{y}}\n$$\n\nParagraph ${i}: a research explanation with enough text to wrap when the notes pane is narrow.`,
+    ).join("\n\n") + "\n\nInsertion target",
+  );
+  await editor.press("ControlOrMeta+End");
+  await page.getByRole("button", { name: "Use live preview" }).click();
+  await editor.press("ControlOrMeta+End");
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  // Link actual PDF text while the editor has an existing insertion position.
+  const span = page
+    .locator(".textLayer span")
+    .filter({ hasText: "Attention combines" });
+  await span.evaluate((el) => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
+  await page.locator(".pdf-page").dispatchEvent("mouseup");
+  await page.getByRole("button", { name: "Link to notes" }).click();
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await editor.press("ControlOrMeta+End");
+  await page.keyboard.type("After source link");
+  const caretGeometry = async () =>
+    page.evaluate(() => {
+      const selection = window.getSelection()!;
+      const range = selection.getRangeAt(0).cloneRange();
+      range.collapse(false);
+      const actual = range.getBoundingClientRect();
+      const drawn = document
+        .querySelector(".cm-cursor")
+        ?.getBoundingClientRect();
+      return {
+        nativeX: actual.x,
+        nativeY: actual.y,
+        drawnX: drawn?.x,
+        drawnY: drawn?.y,
+        caretColor: getComputedStyle(document.querySelector(".cm-content")!)
+          .caretColor,
+        node: selection.anchorNode?.textContent,
+        offset: selection.anchorOffset,
+      };
+    });
+  const assertNativeCaret = async () => {
+    const caret = await caretGeometry();
+    expect(caret.drawnX).toBeUndefined();
+    expect(caret.caretColor).not.toBe("rgba(0, 0, 0, 0)");
+    expect(caret.nativeX).toBeGreaterThan(0);
+    expect(caret.nativeY).toBeGreaterThan(0);
+    expect(caret.node).toContain("After source link");
+    expect(caret.offset).toBe(caret.node?.length);
+  };
+  await assertNativeCaret();
+  await page.getByRole("button", { name: "Expand PDF", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Restore split view", exact: true })
+    .click();
+  const divider = page.getByRole("separator", { name: "Resize PDF and notes" });
+  await divider.press("ArrowRight");
+  await divider.press("ArrowRight");
+  await editor.press("ControlOrMeta+End");
+  await page.keyboard.type(" after resize");
+  await assertNativeCaret();
+  await page.getByRole("button", { name: "Edit Markdown source" }).click();
+  await expect(editor).toContainText("After source link after resize");
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await page.reload();
+  await editor.press("ControlOrMeta+End");
+  await page.keyboard.type(" after reload");
+  await assertNativeCaret();
+  await editor.press("Shift+ArrowLeft");
+  await editor.press("Shift+ArrowLeft");
+  await page.keyboard.type("XX");
+  await expect(editor).toContainText("after reloXX");
+  await editor.press("ControlOrMeta+z");
+  await expect(editor).toContainText("after reload");
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  // A click on rendered prose activates its source without losing insertion.
+  const paragraph = page
+    .locator(".live-block p")
+    .filter({ hasText: "Paragraph 7:" });
+  await paragraph.click();
+  await editor.press("End");
+  await page.keyboard.type(" clicked-here");
+  await expect(editor).toContainText("clicked-here");
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  const paperUrl = page.url();
+  await page.clock.fastForward(86400000);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await page.getByRole("link", { name: "Back to paper library" }).click();
+  await page.goto("/notebooks/00000000-0000-4000-8000-000000000003");
+  await page
+    .getByRole("textbox", { name: "Entry title" })
+    .fill("Another notebook");
+  await page.goto(paperUrl);
+  await page.getByRole("link", { name: "Back to paper library" }).click();
+  await expect(page.locator(".research-timeline .entry-row")).toHaveCount(2);
+  await page.locator(".research-timeline .entry-row").last().click();
+  await editor.press("ControlOrMeta+End");
+  await page.keyboard.type(" after navigation");
+  await assertNativeCaret();
+  await page.screenshot({
+    path: "test-results/fourth-research-caret.png",
+    fullPage: true,
+  });
+});
+
+test("whole goal cards navigate and the Markdown guide is accessible", async ({
+  page,
+  context,
+}) => {
+  await page.goto("/");
+  const card = page.locator(".goal-card").filter({ hasText: "System design" });
+  await expect(card).toHaveAttribute("href", /\/notebooks\//);
+  const box = (await card.boundingBox())!;
+  await card.click({ position: { x: box.width - 8, y: box.height - 8 } });
+  await expect(
+    page.getByRole("heading", { name: "System design", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".cm-content")).toHaveCount(1);
+  await page.goto("/");
+  const research = page
+    .locator(".goal-card")
+    .filter({ hasText: "Research papers" });
+  await research.focus();
+  await research.press("Enter");
+  await expect(page.locator(".research-timeline")).toBeVisible();
+  await page.getByRole("link", { name: "Markdown guide", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Markdown guide", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Code blocks", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".markdown-help")).toContainText("\\frac{-b");
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.getByRole("button", { name: "Copy code blocks example" }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    '```python\ndef greet(name):\n    print(f"Hello, {name}!")\n```',
+  );
+  await page.getByText("Diagrams and plots", { exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Mermaid diagram", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("heading", { name: "Markdown guide", exact: true })
+    .scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: "test-results/fourth-markdown-guide.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 640, height: 900 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "test-results/fourth-markdown-guide-narrow.png",
+    fullPage: true,
+  });
+});
+
+test("single-line code has no empty toolbar row and preserves code when copied", async ({
+  page,
+  context,
+}) => {
+  await page.goto("/notebooks/00000000-0000-4000-8000-000000000003");
+  await page.getByRole("button", { name: "Edit Markdown source" }).click();
+  await page
+    .locator(".cm-content")
+    .fill('```python\nprint("hello world")\n```\n\nContinue here');
+  await page.getByRole("button", { name: "Use live preview" }).click();
+  const block = page.locator(".code-block");
+  await expect(block).toBeVisible();
+  const geometry = await block.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    const content = el.querySelector(".code-content")!.getBoundingClientRect();
+    const button = el.querySelector("button")!.getBoundingClientRect();
+    return {
+      height: box.height,
+      contentTop: content.top - box.top,
+      buttonTop: button.top - box.top,
+    };
+  });
+  expect(geometry.height).toBeLessThan(60);
+  expect(geometry.contentTop).toBeLessThanOrEqual(14);
+  expect(geometry.contentTop).toBe(geometry.buttonTop);
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await block.getByRole("button", { name: "Copy", exact: true }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    'print("hello world")\n',
+  );
+  await page.screenshot({
+    path: "test-results/fourth-code-block.png",
+    fullPage: true,
+  });
 });

@@ -1,5 +1,7 @@
 # Third iteration — September 28, 2026
 
+The [fourth iteration](FOURTH-ITERATION.md) supersedes the writing-view label picker with inline label toggles and direct creation.
+
 Source: the “third iteration” tab of the existing feedback document, reviewed against main `b9b5818`.
 
 ## Implemented feedback

@@ -36,6 +36,7 @@ import {
   Upload,
   Sparkles,
   Link2,
+  BookText,
 } from "lucide-react";
 import {
   ofKind,
@@ -57,6 +58,7 @@ import * as api from "./service";
 import { NotebookIndex, ResearchTimeline } from "./components/JournalViews";
 import { EntryLabels } from "./components/Labels";
 import { ColorSelector, validColor } from "./components/ColorSelector";
+import { MarkdownHelp } from "./components/MarkdownHelp";
 import { useRecords, useSave, useDraft, useJournalDate } from "./hooks";
 import { DraftStatus } from "./components/DraftStatus";
 import { DailyEntry } from "./components/DailyEntry";
@@ -152,6 +154,7 @@ function Workspace() {
           {[
             [CalendarDays, "Today", "/"],
             [BookOpen, "Notebooks", "/notebooks"],
+            [BookText, "Markdown guide", "/help/markdown"],
           ].map(([Icon, label, path]) => {
             const I = Icon as typeof CalendarDays;
             return (
@@ -264,6 +267,7 @@ function Workspace() {
               }
             />
             <Route path="/history" element={<Navigate to="/" replace />} />
+            <Route path="/help/markdown" element={<MarkdownHelp />} />
             <Route
               path="/notebooks/:id/pages"
               element={<NotebookIndex records={records} />}
@@ -425,7 +429,8 @@ function Today({
               a.data.completed,
           );
           return (
-            <div
+            <Link
+              to={`/notebooks/${n.id}`}
               className={`goal-card ${checked ? "checked" : ""}`}
               key={n.id}
               style={{ "--subject": n.data.color } as CSSProperties}
@@ -438,13 +443,11 @@ function Today({
                   {checked && <Check size={14} />}
                 </span>
               </div>
-              <Link to={`/notebooks/${n.id}`}>
-                <h3>{n.data.name}</h3>
-              </Link>
+              <h3>{n.data.name}</h3>
               <span className="goal-status">
                 {checked ? "Completed" : "Write five new words"}
               </span>
-            </div>
+            </Link>
           );
         })}
       </div>

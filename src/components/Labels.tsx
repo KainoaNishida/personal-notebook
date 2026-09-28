@@ -163,9 +163,7 @@ export function EntryLabels({
   records: Snapshot;
   onChange: (value: Entry) => void;
 }) {
-  const [open, setOpen] = useState(false),
-    [search, setSearch] = useState(""),
-    [creating, setCreating] = useState(false);
+  const [open, setOpen] = useState(false);
   const latest = useRef(value);
   latest.current = value;
   const labels = ofKind(records, "label").filter(
@@ -180,76 +178,41 @@ export function EntryLabels({
     });
   return (
     <div className="entry-labels">
-      {labels
-        .filter((l) => value.labelIds?.includes(l.id))
-        .map((l) => (
-          <LabelChip key={l.id} label={l} />
-        ))}
+      {labels.map((label) => (
+        <LabelChip
+          key={label.id}
+          label={label}
+          selected={value.labelIds?.includes(label.id)}
+          onClick={() => toggle(label.id)}
+        />
+      ))}
       <button
         type="button"
         className="text-button"
-        onClick={() => {
-          setSearch("");
-          setCreating(false);
-          setOpen(true);
-        }}
+        onClick={() => setOpen(true)}
       >
         <Plus size={14} />
-        Add labels
+        Add label
       </button>
       <Modal
         open={open}
         onOpenChange={setOpen}
-        title="Add labels"
-        description="Select labels for this page. Your note stays open and saves automatically."
+        title="Create label"
+        description="Create a label for this notebook and add it to the current page."
       >
-        <label className="field">
-          Search labels
-          <input value={search} onChange={(e) => setSearch(e.target.value)} />
-        </label>
-        <div className="label-options">
-          {labels
-            .filter((l) =>
-              l.data.name.toLowerCase().includes(search.toLowerCase()),
-            )
-            .map((l) => (
-              <LabelChip
-                key={l.id}
-                label={l}
-                selected={value.labelIds?.includes(l.id)}
-                onClick={() => toggle(l.id)}
-              />
-            ))}
-        </div>
-        {!labels.length && (
-          <p className="muted">No labels yet in this notebook.</p>
-        )}
-        {creating ? (
-          <LabelForm
-            notebookId={value.notebookId}
-            onSaved={(l) => {
-              onChange({
-                ...latest.current,
-                labelIds: [
-                  ...new Set([...(latest.current.labelIds || []), l.id]),
-                ],
-              });
-              setCreating(false);
-            }}
-            onCancel={() => setCreating(false)}
-          />
-        ) : (
-          <button type="button" onClick={() => setCreating(true)}>
-            Create a label
-          </button>
-        )}
-        <button
-          className="label-done"
-          type="button"
-          onClick={() => setOpen(false)}
-        >
-          Done
-        </button>
+        <LabelForm
+          notebookId={value.notebookId}
+          onSaved={(label) => {
+            onChange({
+              ...latest.current,
+              labelIds: [
+                ...new Set([...(latest.current.labelIds || []), label.id]),
+              ],
+            });
+            setOpen(false);
+          }}
+          onCancel={() => setOpen(false)}
+        />
       </Modal>
     </div>
   );
