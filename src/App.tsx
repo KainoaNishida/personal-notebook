@@ -34,7 +34,6 @@ import {
   RotateCcw,
   Download,
   Upload,
-  Trash2,
   Sparkles,
   Link2,
 } from "lucide-react";
@@ -55,14 +54,9 @@ import type {
   AnyRecord,
 } from "./domain";
 import * as api from "./service";
-import {
-  NotebookIndex,
-  NotebookStream,
-  EntryLabels,
-  TimeLog,
-  TimeHistory,
-  ResearchTimeline,
-} from "./components/JournalViews";
+import { NotebookIndex, ResearchTimeline } from "./components/JournalViews";
+import { EntryLabels } from "./components/Labels";
+import { ColorSelector, validColor } from "./components/ColorSelector";
 import { useRecords, useSave, useDraft, useJournalDate } from "./hooks";
 import { DraftStatus } from "./components/DraftStatus";
 import { DailyEntry } from "./components/DailyEntry";
@@ -269,10 +263,7 @@ function Workspace() {
                 <Today key="today" records={records} settings={settings} />
               }
             />
-            <Route
-              path="/history"
-              element={<TimeHistory records={records} />}
-            />
+            <Route path="/history" element={<Navigate to="/" replace />} />
             <Route
               path="/notebooks/:id/pages"
               element={<NotebookIndex records={records} />}
@@ -393,7 +384,6 @@ function Today({
   settings: Settings;
 }) {
   const date = useJournalDate(settings.timezone);
-  const nav = useNavigate();
   const ns = ofKind(records, "notebook")
       .filter((n) => !n.data.archived)
       .sort((a, b) => a.data.order - b.data.order),
@@ -458,34 +448,118 @@ function Today({
           );
         })}
       </div>
-      <section className="productive-time">
+      <section className="activity-section">
         <div className="section-heading">
-          <h2>Productive time</h2>
-          <Link to="/history">View history</Link>
+          <h2>Activity</h2>
+          <span className="small muted">
+            {displayDate(days[0])} – {displayDate(date)}
+          </span>
         </div>
-        <p>
-          Today:{" "}
-          {Math.floor(
-            activities
-              .filter((a) => a.data.date === date)
-              .reduce((sum, a) => sum + (a.data.minutes || 0), 0) / 60,
-          )}
-          h{" "}
-          {activities
-            .filter((a) => a.data.date === date)
-            .reduce((sum, a) => sum + (a.data.minutes || 0), 0) % 60}
-          m
-        </p>
-        {ns.map((n) => (
-          <TimeLog
-            key={`${n.id}:${date}`}
-            notebook={n}
-            records={records}
-            date={date}
-          />
-        ))}
+        <div
+          className="activity-scroll"
+          role="region"
+          aria-label="Activity for the last 14 days"
+          tabIndex={0}
+        >
+          <table className="activity-table">
+            <caption className="sr-only">
+              Notebook completion over the last 14 days
+            </caption>
+            <colgroup>
+              <col className="activity-name-column" />
+              {days.map((d) => (
+                <col key={d} />
+              ))}
+            </colgroup>
+            <thead>
+              <tr>
+                <th scope="col">Notebook</th>
+                {days.map((d) => (
+                  <th
+                    scope="col"
+                    key={d}
+                    className={d === date ? "activity-today" : ""}
+                    aria-label={displayDate(d, {
+                      weekday: "long",
+                      month: "long",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  >
+                    <span>{displayDate(d, { weekday: "short" })}</span>
+                    <strong>{displayDate(d, { day: "numeric" })}</strong>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {ns.map((n) => (
+                <tr key={n.id}>
+                  <th scope="row">
+                    <span>
+                      <SubjectIcon name={n.data.icon} size={17} />
+                      {n.data.name}
+                    </span>
+                  </th>
+                  {days.map((d) => {
+                    const completed = activities.some(
+                      (a) =>
+                        a.data.notebookId === n.id &&
+                        a.data.date === d &&
+                        a.data.completed,
+                    );
+                    const entry = ofKind(records, "entry").find(
+                      (e) =>
+                        e.data.notebookId === n.id &&
+                        e.data.date === d &&
+                        !e.data.paperId,
+                    );
+                    const study = ofKind(records, "study").some(
+                      (r) => r.data.notebookId === n.id && r.data.date === d,
+                    );
+                    const href = n.data.research
+                      ? study
+                        ? `/notebooks/${n.id}#study-${d}`
+                        : undefined
+                      : entry
+                        ? `/entries/${entry.id}`
+                        : undefined;
+                    const label = `${n.data.name}, ${displayDate(d, { month: "long", day: "numeric", year: "numeric" })}: ${completed ? "completed" : "not completed"}`;
+                    const classes = `activity-cell${completed ? " filled" : ""}`;
+                    return (
+                      <td
+                        key={d}
+                        className={d === date ? "activity-today" : ""}
+                      >
+                        {href ? (
+                          <Link
+                            to={href}
+                            aria-label={label}
+                            title={label}
+                            className={classes}
+                          >
+                            {completed && <Check size={14} />}
+                          </Link>
+                        ) : (
+                          <span
+                            role="img"
+                            aria-label={label}
+                            title={label}
+                            className={classes}
+                          >
+                            {completed && <Check size={14} />}
+                          </span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
-      <div className="today-columns">
+      <div className="today-reflection">
         <section>
           <div className="section-heading">
             <h2>Reflection</h2>
@@ -502,45 +576,6 @@ function Today({
             ) : (
               <p>Open Notebooks to add a Life notebook.</p>
             )}
-          </div>
-        </section>
-        <section className="rhythm">
-          <div className="section-heading">
-            <h2>Activity</h2>
-            <span className="small muted">14 days</span>
-          </div>
-          <div className="rhythm-card">
-            {ns.map((n) => (
-              <div className="rhythm-row" key={n.id}>
-                <span title={n.data.name} style={{ color: n.data.color }}>
-                  <SubjectIcon name={n.data.icon} size={15} /> {n.data.name}
-                </span>
-                {days.map((d) => {
-                  const yes = activities.some(
-                    (a) =>
-                      a.data.date === d &&
-                      a.data.notebookId === n.id &&
-                      a.data.completed,
-                  );
-                  return (
-                    <button
-                      key={d}
-                      title={`${n.data.name}, ${displayDate(d)}: ${yes ? "completed" : "not marked"}`}
-                      aria-label={`${n.data.name}, ${d}: ${yes ? "completed" : "not marked"}`}
-                      className={yes ? "rhythm-cell filled" : "rhythm-cell"}
-                      style={yes ? { background: "var(--accent)" } : undefined}
-                      onClick={() =>
-                        nav(`/notebooks/${n.id}/pages?from=${d}&to=${d}`)
-                      }
-                    />
-                  );
-                })}
-              </div>
-            ))}
-            <div className="rhythm-caption">
-              <span>{displayDate(days[0])}</span>
-              <span>{displayDate(date)}</span>
-            </div>
           </div>
         </section>
       </div>
@@ -726,6 +761,7 @@ function NotebookPage({
 }) {
   const { id } = useParams();
   const date = useJournalDate(settings.timezone);
+  const [params] = useSearchParams();
   const notebook = ofKind(records, "notebook").find((n) => n.id === id);
   if (!notebook)
     return (
@@ -735,7 +771,35 @@ function NotebookPage({
     );
   if (notebook.data.research)
     return <Papers records={records} notebook={notebook} />;
-  return <NotebookStream notebook={notebook} records={records} date={date} />;
+  const legacy = ofKind(records, "entry").find(
+    (e) =>
+      e.id === params.get("entry") &&
+      e.data.notebookId === notebook.id &&
+      !e.data.paperId,
+  );
+  if (legacy) return <Navigate to={`/entries/${legacy.id}`} replace />;
+  return (
+    <main className="page daily-page">
+      <div className="row between">
+        <h1>{notebook.data.name}</h1>
+        <Link to={`/notebooks/${notebook.id}/pages`}>All pages</Link>
+      </div>
+      <p className="entry-date">
+        {displayDate(date, {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+        })}
+      </p>
+      <DailyEntry
+        key={`${notebook.id}:${date}`}
+        notebook={notebook}
+        records={records}
+        date={date}
+      />
+    </main>
+  );
 }
 function EntryPage({ records }: { records: Snapshot }) {
   const { id } = useParams(),
@@ -746,10 +810,25 @@ function EntryPage({ records }: { records: Snapshot }) {
   if (record?.data.paperId)
     return <Navigate to={`/papers/${record.data.paperId}`} replace />;
   return record && !record.deleted_at ? (
-    <Navigate
-      to={`/notebooks/${record.data.notebookId}?entry=${record.id}`}
-      replace
-    />
+    <main className="page daily-page">
+      <Link to={`/notebooks/${record.data.notebookId}/pages`}>
+        Back to pages
+      </Link>
+      <h1>
+        {ofKind(records, "notebook").find(
+          (n) => n.id === record.data.notebookId,
+        )?.data.name || "Notebook"}
+      </h1>
+      <p className="entry-date">
+        {displayDate(record.data.date, {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+        })}
+      </p>
+      <EntryWriting key={record.id} record={record} records={records} />
+    </main>
   ) : (
     <Empty title="Entry not found.">It may be in Trash in Settings.</Empty>
   );
@@ -764,7 +843,6 @@ export function EntryWriting({
   editorRef?: React.RefObject<EditorHandle | null>;
 }) {
   const draft = useDraft(record),
-    save = useSave(),
     nav = useNavigate(),
     [error, setError] = useState("");
   function source(id: string) {
@@ -773,36 +851,8 @@ export function EntryWriting({
     else
       setError("The source annotation is missing. Restore it from a backup.");
   }
-  async function trash() {
-    try {
-      await draft.flush();
-      if (api.hasRecovery(record.id))
-        throw new Error(
-          "Save or resolve this draft before moving it to trash.",
-        );
-      const all = await api.list();
-      const latest = ofKind(all, "entry").find((e) => e.id === record.id);
-      if (latest)
-        await save(
-          "entry",
-          latest.id,
-          latest.data,
-          latest.revision,
-          new Date().toISOString(),
-        );
-      nav("/notebooks/" + record.data.notebookId);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
   return (
     <div className="entry-writing">
-      {!record.data.paperId && (
-        <details className="section-menu">
-          <summary>Section options</summary>
-          <button onClick={() => void trash()}>Move entry to trash</button>
-        </details>
-      )}
       <EntryLabels
         value={draft.value}
         records={records}
@@ -1100,18 +1150,6 @@ function PaperPage({
           }}
         />
         <section className="science-notes">
-          {notebook && (
-            <details>
-              <summary>Log productive time</summary>
-              <TimeLog
-                key={studyDate}
-                notebook={notebook}
-                records={records}
-                date={studyDate}
-                paperId={paper.id}
-              />
-            </details>
-          )}
           {note && (
             <EntryWriting
               key={note.id}
@@ -1240,34 +1278,24 @@ function SettingsPage({
       <section className="settings-card">
         <h2>Appearance</h2>
         <div className="row">
-          <label className="field">
-            Main color
-            <select
-              aria-label="Main color"
-              value={
-                darkBackgrounds.includes(mainColor)
-                  ? mainColor
-                  : darkBackgrounds[0]
-              }
-              onChange={(e) => setMainColor(e.target.value)}
-            >
-              {darkBackgrounds.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            Accent color
-            <input
-              aria-label="Accent color"
-              type="color"
-              value={accentColor}
-              onChange={(e) => setAccentColor(e.target.value)}
-            />
-          </label>
+          <ColorSelector
+            label="Main color"
+            value={
+              darkBackgrounds.includes(mainColor)
+                ? mainColor
+                : darkBackgrounds[0]
+            }
+            onChange={setMainColor}
+            background
+          />
+          <ColorSelector
+            label="Accent color"
+            value={accentColor}
+            onChange={setAccentColor}
+            accent
+          />
           <button
+            disabled={!validColor(accentColor)}
             onClick={() =>
               void save(
                 "settings",

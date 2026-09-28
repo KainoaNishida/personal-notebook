@@ -146,7 +146,9 @@ test("PDF regions survive zoom and reload; AI only opens on request", async ({
   await expect(page.locator(".research-timeline .entry-row")).toHaveCount(1);
 });
 
-test("image, diagram, undo, search and trash recovery", async ({ page }) => {
+test("image captions, search and removal of deletion controls", async ({
+  page,
+}) => {
   await page.goto("/notebooks/00000000-0000-4000-8000-000000000002");
   await page
     .getByRole("textbox", { name: "Entry title" })
@@ -189,10 +191,12 @@ test("image, diagram, undo, search and trash recovery", async ({ page }) => {
   await expect(
     page.getByRole("textbox", { name: "Image caption" }),
   ).toHaveValue("A hand-drawn [study] $&");
-  await page.getByText("Section options", { exact: true }).click();
-  await page.getByRole("button", { name: "Move entry to trash" }).click();
-  await page.goto("/settings");
-  await page.getByRole("button", { name: "Restore", exact: true }).click();
+  await expect(page.getByText("Section options", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole("button", { name: "Move entry to trash" }),
+  ).toHaveCount(0);
   await page
     .getByRole("textbox", { name: "Search entries" })
     .fill("A visual notebook");
@@ -379,65 +383,124 @@ test("long research notes preserve preview nodes, cursor, scroll and undo across
   ).toBe(true);
 });
 
-test("labels, indexes, Quick Links and productive time keep distinct destinations", async ({
+test("label creation, filtering, editing and shared color controls", async ({
   page,
 }) => {
   const book = "00000000-0000-4000-8000-000000000004";
-  await page.goto("/notebooks");
-  await page
-    .locator(".notebook-card")
-    .filter({ hasText: "Reading" })
-    .getByRole("link")
-    .click();
-  await expect(page).toHaveURL(new RegExp(`/notebooks/${book}/pages`));
-  await page.getByText("Manage notebook labels", { exact: true }).click();
-  await page.getByRole("textbox", { name: "Label name" }).fill("Theory");
-  await page.getByRole("button", { name: "Add label", exact: true }).click();
-  await page.getByRole("link", { name: "Open notebook", exact: true }).click();
+  await page.goto(`/notebooks/${book}`);
   await page
     .getByRole("textbox", { name: "Entry title" })
     .fill("Filtered page");
-  await page.getByRole("checkbox", { name: "Theory", exact: true }).check();
   await page.getByRole("button", { name: "Edit Markdown source" }).click();
   await page.locator(".cm-content").fill("Five new words are here");
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "All pages & labels" }).click();
-  await page
-    .getByRole("group", { name: "Match all selected labels" })
-    .getByRole("checkbox", { name: "Theory", exact: true })
-    .check();
-  await page.getByRole("textbox", { name: "Search pages" }).fill("Filtered");
-  await expect(page.locator(".entry-row")).toHaveCount(1);
-  await page.reload();
+  await page.getByRole("button", { name: "Add labels", exact: true }).click();
+  await page.getByRole("button", { name: "Create a label" }).click();
+  await page.getByRole("textbox", { name: "Label name" }).fill("Theory");
+  await page.getByRole("textbox", { name: "Label color hex" }).fill("#bad");
   await expect(
-    page.getByRole("checkbox", { name: "Theory", exact: true }),
-  ).toBeChecked();
-  await page.goto("/");
+    page.getByRole("button", { name: "Create label", exact: true }),
+  ).toBeDisabled();
   await page
-    .getByRole("spinbutton", { name: "Reading hours", exact: true })
-    .fill("1");
-  await page
-    .getByRole("spinbutton", { name: "Reading minutes", exact: true })
-    .fill("15");
-  await page
-    .locator(".time-log")
-    .filter({
-      has: page.getByRole("spinbutton", { name: "Reading hours", exact: true }),
-    })
-    .getByRole("button", { name: "Save time" })
+    .getByRole("button", { name: "Label color: #60a5fa", exact: true })
     .click();
-  await expect(page.getByText("Today: 1h 15m")).toBeVisible();
-  await page.getByRole("link", { name: "View history" }).click();
+  await page.getByRole("button", { name: "Create label", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "1 hours 15 minutes" }),
-  ).toBeVisible();
-  await page
-    .getByRole("combobox", { name: "Notebook", exact: true })
-    .selectOption(book);
+    page.getByRole("button", { name: "Theory", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(page.locator(".cm-content")).toContainText("Five new words");
+  await page.getByRole("link", { name: "All pages", exact: true }).click();
+  await page.getByRole("button", { name: "Labels", exact: true }).click();
+  await page.getByRole("button", { name: "Theory", exact: true }).click();
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await page.getByRole("textbox", { name: "Search pages" }).fill("Filtered");
+  await expect(page.locator(".index-entry")).toHaveCount(1);
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "1 hours 15 minutes" }),
+    page
+      .locator(".active-filters")
+      .getByRole("button", { name: "Theory", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page
+    .getByRole("button", { name: "Manage labels", exact: true })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Theory", exact: true })
+    .click();
+  await page.getByRole("textbox", { name: "Label name" }).fill("Foundations");
+  await page.getByRole("textbox", { name: "Label color hex" }).fill("#ff00ff");
+  await page.getByRole("button", { name: "Save label", exact: true }).click();
+  await expect(
+    page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Foundations", exact: true }),
   ).toBeVisible();
+  await page.screenshot({
+    path: "test-results/third-label-dialog.png",
+    fullPage: true,
+  });
+  await page.getByRole("textbox", { name: "Label name" }).fill(" foundations ");
+  await page.getByRole("button", { name: "Create label", exact: true }).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await page.getByRole("textbox", { name: "Label name" }).fill("Practice");
+  await page.getByRole("button", { name: "Create label", exact: true }).click();
+  await expect(
+    page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Practice", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "Labels (1)", exact: true }).click();
+  await page.getByRole("button", { name: "Practice", exact: true }).click();
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(page.locator(".index-entry")).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator(".active-filters .label-chip")).toHaveCount(2);
+  await page
+    .locator(".active-filters")
+    .getByRole("button", { name: "Practice", exact: true })
+    .click();
+  await expect(page.locator(".index-entry")).toHaveCount(1);
+  await page.goto("/notebooks/00000000-0000-4000-8000-000000000003");
+  await page.getByRole("button", { name: "Add labels", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Foundations", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await page.goto("/settings");
+  await page.getByRole("textbox", { name: "Accent color hex" }).fill("invalid");
+  await expect(
+    page.getByRole("button", { name: "Save colors" }),
+  ).toBeDisabled();
+  await page
+    .getByRole("button", { name: "Accent color: #60a5fa", exact: true })
+    .focus();
+  await page.keyboard.press("Space");
+  await page
+    .getByRole("button", { name: "Main color: Midnight", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Save colors" }).click();
+  await expect(page.getByText("Colors saved.")).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole("textbox", { name: "Accent color hex" }),
+  ).toHaveValue("#60a5fa");
+  await expect(
+    page.getByRole("button", { name: "Main color: Midnight" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.screenshot({
+    path: "test-results/third-colors.png",
+    fullPage: true,
+  });
+  await page.goto("/history");
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByText("Productive time", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(page.getByRole("button", { name: "Save time" })).toHaveCount(0);
 });
 
 test("slow image uploads preserve insertion position through intervening edits", async ({
@@ -488,7 +551,7 @@ test("slow image uploads preserve insertion position through intervening edits",
   await expect(editor).toContainText("Tail intervening edit after upload");
 });
 
-test("old entry links open chronological sections and switching sections preserves drafts", async ({
+test("Quick Links isolate today, historical links preserve drafts and index sorts dates", async ({
   page,
 }) => {
   const notebook = "11111111-1111-4111-8111-111111111111";
@@ -545,35 +608,123 @@ test("old entry links open chronological sections and switching sections preserv
     },
     { notebook, oldest, newer },
   );
-  await page.goto(`/entries/${oldest}`);
+  await page.goto(`/notebooks/${notebook}?entry=${oldest}`);
+  await expect(page).toHaveURL(new RegExp(`/entries/${oldest}$`));
   await expect(page.getByRole("textbox", { name: "Entry title" })).toHaveValue(
     "Older page",
   );
-  await expect(page.locator(".dated-section")).toHaveCount(3);
   await expect(page.locator(".cm-editor")).toHaveCount(1);
+  await expect(
+    page.getByRole("navigation", { name: "Notebook outline" }),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "Edit Markdown source" }).click();
   await page
     .locator(".cm-content")
     .fill("Earlier paragraph with five saved words.");
-  await page
-    .getByRole("navigation", { name: "Notebook outline" })
-    .getByRole("button", { name: /Newer page/ })
-    .click();
+  await page.getByRole("link", { name: "Chronology", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Entry title" })).toHaveValue(
-    "Newer page",
+    "",
   );
+  await expect(page.getByText("Newer paragraph.", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(page.getByText("Older page", { exact: true })).toHaveCount(0);
+  await page.getByRole("link", { name: "All pages", exact: true }).click();
+  await expect(page.locator(".index-entry h2")).toHaveText([
+    "Newer page",
+    "Older page",
+  ]);
   await page
-    .getByRole("navigation", { name: "Notebook outline" })
-    .getByRole("button", { name: /Older page/ })
+    .getByRole("combobox", { name: "Sort by date" })
+    .selectOption("asc");
+  await expect(page.locator(".index-entry h2")).toHaveText([
+    "Older page",
+    "Newer page",
+  ]);
+  await page
+    .getByRole("link")
+    .filter({
+      has: page.getByRole("heading", { name: "Older page", exact: true }),
+    })
     .click();
   await expect(page.locator(".cm-content")).toContainText(
     "Earlier paragraph with five saved words.",
   );
+  await page.getByRole("link", { name: "Back to pages" }).click();
+  await page.goto(
+    `/notebooks/${notebook}/pages?from=2020-01-02&to=2020-01-02&sort=asc&q=page`,
+  );
+  await expect(page).not.toHaveURL(/from=/);
+  await expect(page.locator(".index-entry")).toHaveCount(2);
+  await page.reload();
   await expect(
-    page.getByText("Previous entries", { exact: false }),
-  ).toHaveCount(0);
+    page.getByRole("combobox", { name: "Sort by date" }),
+  ).toHaveValue("asc");
   await page.screenshot({
-    path: "test-results/notebook-sections.png",
+    path: "test-results/third-index.png",
     fullPage: true,
   });
+});
+
+test("Activity dates align at narrow and wide widths and empty days do not navigate", async ({
+  page,
+}) => {
+  await page.goto("/");
+  for (const width of [640, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    const geometry = await page.locator(".activity-table").evaluate((table) => {
+      const headers = [...table.querySelectorAll("thead th")].slice(1);
+      const cells = [...table.querySelectorAll("tbody tr:first-child td")];
+      return headers.map((h, i) => ({
+        header: h.getBoundingClientRect().x,
+        cell: cells[i].getBoundingClientRect().x,
+        width: cells[i].getBoundingClientRect().width,
+      }));
+    });
+    for (const cell of geometry) {
+      expect(Math.abs(cell.header - cell.cell)).toBeLessThan(1);
+      expect(cell.width).toBeGreaterThanOrEqual(32);
+    }
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await expect(
+      page.locator(".activity-table tbody td:not(:last-child) a"),
+    ).toHaveCount(0);
+    await expect(page.locator(".activity-table tbody a")).toHaveCount(1);
+    await page.screenshot({
+      path: `test-results/third-today-${width}.png`,
+      fullPage: true,
+    });
+  }
+});
+
+test("daily writing rolls over at midnight without moving the prior day's text", async ({
+  page,
+}) => {
+  const book = "00000000-0000-4000-8000-000000000003";
+  await page.clock.install({ time: new Date("2026-09-29T06:59:30Z") });
+  await page.goto(`/notebooks/${book}`);
+  await page
+    .getByRole("textbox", { name: "Entry title" })
+    .fill("Before midnight");
+  await page.getByRole("button", { name: "Edit Markdown source" }).click();
+  await page.locator(".cm-content").fill("This belongs to the previous day.");
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await page.clock.fastForward(31000);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.locator(".entry-date")).toContainText("September 29, 2026");
+  await expect(page.getByRole("textbox", { name: "Entry title" })).toHaveValue(
+    "",
+  );
+  await expect(page.locator(".cm-content")).not.toContainText("previous day");
+  await page.getByRole("link", { name: "All pages", exact: true }).click();
+  await expect(page.locator(".index-entry")).toHaveCount(1);
+  await page.locator(".index-entry").click();
+  await expect(page.locator(".entry-date")).toContainText("September 28, 2026");
+  await expect(page.locator(".cm-content")).toContainText(
+    "This belongs to the previous day.",
+  );
 });

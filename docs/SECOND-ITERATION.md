@@ -1,3 +1,5 @@
+> Third-iteration feedback supersedes the time-entry UI, ordinary chronological Quick Links, date-range filters, and entry deletion controls. See [THIRD-ITERATION.md](THIRD-ITERATION.md). Historical data remains intact.
+
 # Second iteration
 
 Scope: the second-iteration feedback tab only, based on `ec51a86`. The Google Doc is unchanged. Portfolio integration and automatic topic classification remain outside this release.
