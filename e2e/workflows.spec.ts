@@ -952,3 +952,42 @@ test("single-line code has no empty toolbar row and preserves code when copied",
     fullPage: true,
   });
 });
+
+test("Markdown guide scrolls with the wheel across its full pane and with the keyboard", async ({
+  page,
+}) => {
+  for (const width of [1920, 1440, 640]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/help/markdown");
+    const guide = page.getByRole("main");
+    await expect(
+      page.getByRole("heading", { name: "Markdown guide", exact: true }),
+    ).toBeVisible();
+    // Wheel over the right side of the application, including the guide's gutter.
+    await page.mouse.move(width - 24, 400);
+    await page.mouse.wheel(0, 600);
+    await expect
+      .poll(() => guide.evaluate((el) => el.scrollTop))
+      .toBeGreaterThan(0);
+    await guide.focus();
+    await page.keyboard.press("End");
+    await expect(
+      page.getByText("Diagrams and plots", { exact: true }),
+    ).toBeInViewport();
+    await page.getByText("Diagrams and plots", { exact: true }).click();
+    await guide.focus();
+    await page.keyboard.press("End");
+    await expect(
+      page.getByRole("heading", { name: "Plot", exact: true }),
+    ).toBeInViewport();
+    await page.keyboard.press("Home");
+    await expect(
+      page.getByRole("heading", { name: "Markdown guide", exact: true }),
+    ).toBeInViewport();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollHeight <= innerHeight,
+      ),
+    ).toBe(true);
+  }
+});

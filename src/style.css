@@ -2381,8 +2381,18 @@ a.goal-card:focus-visible {
 .cm-content::selection {
   background: #f59a5655;
 }
-.markdown-help {
+.main-shell > .markdown-help {
+  max-width: none;
+  padding: 0;
+}
+.markdown-help:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.markdown-help-content {
   max-width: 1100px;
+  margin: 0 auto;
+  padding: 36px 48px 48px;
 }
 .format-grid {
   display: grid;
@@ -2431,6 +2441,12 @@ a.goal-card:focus-visible {
     grid-template-columns: 1fr;
   }
 }
-.markdown-help > .format-example + .format-example {
+.markdown-help-content > .format-example + .format-example {
   margin-top: 16px;
+}
+
+@media (max-width: 800px) {
+  .markdown-help-content {
+    padding: 24px 20px 48px;
+  }
 }
