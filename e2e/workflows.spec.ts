@@ -881,7 +881,7 @@ test("whole goal cards navigate and the Markdown guide is accessible", async ({
   await research.focus();
   await research.press("Enter");
   await expect(page.locator(".research-timeline")).toBeVisible();
-  await page.getByRole("link", { name: "Markdown guide", exact: true }).click();
+  await page.goto("/help/markdown");
   await expect(
     page.getByRole("heading", { name: "Markdown guide", exact: true }),
   ).toBeVisible();
@@ -990,4 +990,89 @@ test("Markdown guide scrolls with the wheel across its full pane and with the ke
       ),
     ).toBe(true);
   }
+});
+
+test("Calm desk formatting preserves selection, undo, drafts and helper scrolling", async ({
+  page,
+}) => {
+  await page.goto("/notebooks/00000000-0000-4000-8000-000000000003");
+  const editor = page.locator(".cm-content");
+  await page
+    .getByRole("button", { name: "Edit Markdown source", exact: true })
+    .click();
+  await editor.fill("A useful thought");
+  await editor.press("ControlOrMeta+a");
+  await page.getByRole("button", { name: "Bold", exact: true }).click();
+  await expect(editor).toHaveText("**A useful thought**");
+  await editor.press("ControlOrMeta+z");
+  await expect(editor).toHaveText("A useful thought");
+  await editor.press("ControlOrMeta+Shift+z");
+  await expect(editor).toHaveText("**A useful thought**");
+  await editor.press("ControlOrMeta+z");
+  await editor.press("ControlOrMeta+a");
+  await editor.press("ControlOrMeta+i");
+  await expect(editor).toHaveText("*A useful thought*");
+  await editor.press("ControlOrMeta+z");
+  await editor.press("ControlOrMeta+a");
+  await page
+    .getByRole("combobox", { name: "Math", exact: true })
+    .selectOption("math");
+  await expect(editor).toContainText("$$");
+  await editor.press("ControlOrMeta+z");
+  await editor.press("ControlOrMeta+End");
+  await page
+    .getByRole("button", { name: "Markdown guide", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  const guide = page.locator(".guide-dialog-scroll");
+  await guide.focus();
+  await guide.press("End");
+  await expect
+    .poll(() => guide.evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(0);
+  await dialog.getByText("Diagrams and plots", { exact: true }).click();
+  await guide.press("Home");
+  await page.mouse.move(650, 500);
+  await page.mouse.wheel(0, 700);
+  await expect
+    .poll(() => guide.evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(0);
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Markdown guide", exact: true }),
+  ).toBeFocused();
+  await page.getByRole("button", { name: "Italic", exact: true }).click();
+  await page.keyboard.type("continued");
+  await expect(editor).toContainText("A useful thought*continued*");
+  await expect(page.getByText("Saved", { exact: true }).first()).toBeVisible();
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Edit Markdown source", exact: true })
+    .click();
+  await expect(editor).toContainText("A useful thought*continued*");
+  for (const width of [640, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await expect(page.locator(".editor-toolbar")).toBeVisible();
+    expect(
+      await page
+        .locator(".daily-page")
+        .evaluate((el) => el.scrollWidth <= el.clientWidth),
+    ).toBe(true);
+    await page.screenshot({ path: `test-results/calm-writing-${width}.png` });
+    await page
+      .getByRole("button", { name: "Markdown guide", exact: true })
+      .click();
+    await page.screenshot({ path: `test-results/calm-guide-${width}.png` });
+    await page.keyboard.press("Escape");
+  }
+  await page.goto("/");
+  await expect(page.locator(".activity-table")).toBeVisible();
+  await expect(
+    page
+      .locator(".app-sidebar")
+      .getByRole("link", { name: "Markdown guide", exact: true }),
+  ).toHaveCount(0);
+  await page.screenshot({ path: "test-results/calm-today.png" });
 });

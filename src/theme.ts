@@ -1,5 +1,6 @@
 import type { Settings } from "./domain";
 export const darkBackgrounds = [
+  "#1c1d20",
   "#18181b",
   "#111827",
   "#17201c",
@@ -60,6 +61,17 @@ export function themeTokens(settings: Settings): Record<string, string> {
     Object.assign(tokens, {
       "--accent": accent,
       "--accent-text": lightColor(accent) ? "#18181b" : "#fafafa",
+    });
+  if (main === "#1c1d20")
+    Object.assign(tokens, {
+      "--bg": "#1c1d20",
+      "--sidebar": "#242529",
+      "--surface": "#242529",
+      "--surface2": "#2e3035",
+      "--border": "#3b3d42",
+      "--text": "#eeeae4",
+      "--muted": "#b1aea8",
+      "--rhythm-empty": "#3b3d42",
     });
   return tokens;
 }

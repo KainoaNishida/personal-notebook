@@ -61,6 +61,14 @@ function Example({ title, source }: { title: string; source: string }) {
     </section>
   );
 }
+export function MarkdownHelpContent() {
+  return (
+    <div className="markdown-help-content">
+      <GuideContent />
+    </div>
+  );
+}
+
 export function MarkdownHelp() {
   return (
     <main
@@ -68,86 +76,92 @@ export function MarkdownHelp() {
       tabIndex={0}
       aria-labelledby="markdown-guide-title"
     >
-      <div className="markdown-help-content">
-        <h1 id="markdown-guide-title">Markdown guide</h1>
-        <p className="muted">
-          Type these shortcuts into any note. Use the editor’s source button to
-          see all Markdown, or live preview to see formatting. Click formatted
-          text to edit its source.
-        </p>
-        <div className="format-grid">
-          <Example title="Code blocks" source={code} />
-          <Example title="Math equations" source={equation} />
-        </div>
-        <p>
-          Code blocks start and end with three backticks on separate lines. Add
-          a language such as <code>python</code>, <code>javascript</code>,{" "}
-          <code>cpp</code>, or <code>json</code> for highlighting. Use single
-          dollar signs for inline math, or double dollar signs on separate lines
-          for a displayed equation.
-        </p>
-        <div className="format-grid">
-          {basics.map(([title, source]) => (
-            <Example key={title} title={title} source={source} />
+      <MarkdownHelpContent />
+    </main>
+  );
+}
+
+function GuideContent() {
+  return (
+    <>
+      <h1 id="markdown-guide-title">Markdown guide</h1>
+      <p className="muted">
+        Type these shortcuts into any note. Use the editor’s source button to
+        see all Markdown, or live preview to see formatting. Click formatted
+        text to edit its source.
+      </p>
+      <div className="format-grid">
+        <Example title="Code blocks" source={code} />
+        <Example title="Math equations" source={equation} />
+      </div>
+      <p>
+        Code blocks start and end with three backticks on separate lines. Add a
+        language such as <code>python</code>, <code>javascript</code>,{" "}
+        <code>cpp</code>, or <code>json</code> for highlighting. Use single
+        dollar signs for inline math, or double dollar signs on separate lines
+        for a displayed equation.
+      </p>
+      <div className="format-grid">
+        {basics.map(([title, source]) => (
+          <Example key={title} title={title} source={source} />
+        ))}
+      </div>
+      <section className="format-example">
+        <h2>More math</h2>
+        <p>Use these LaTeX commands inside dollar signs.</p>
+        <dl className="math-reference">
+          {math.map(([label, syntax]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>
+                <code>{syntax}</code>
+              </dd>
+            </div>
           ))}
-        </div>
-        <section className="format-example">
-          <h2>More math</h2>
-          <p>Use these LaTeX commands inside dollar signs.</p>
-          <dl className="math-reference">
-            {math.map(([label, syntax]) => (
-              <div key={label}>
-                <dt>{label}</dt>
-                <dd>
-                  <code>{syntax}</code>
-                </dd>
-              </div>
-            ))}
-          </dl>
+        </dl>
+        <Example
+          title="Aligned equations"
+          source={
+            "$$\n\\begin{aligned}\na &= b + c \\\\\nd &= e + f\n\\end{aligned}\n$$"
+          }
+        />
+      </section>
+      <section className="format-example">
+        <h2>Paragraphs, images, and literal characters</h2>
+        <p>
+          Leave a blank line between paragraphs. End a line with two spaces for
+          a line break within a paragraph. Put a backslash before a formatting
+          character to show it literally: <code>{"\\*"}</code> displays an
+          asterisk.
+        </p>
+        <p>
+          Use <strong>Insert image</strong> in the editor to upload an image;
+          add an optional caption beneath it. External image URLs and raw HTML
+          are not rendered. Custom HTML colors, fonts, and underlines are not
+          supported.
+        </p>
+      </section>
+      <details className="format-advanced">
+        <summary>Diagrams and plots</summary>
+        <p>
+          Use Mermaid for diagrams and JSON for simple line or scatter plots
+          (2–200 points).
+        </p>
+        <div className="format-grid">
           <Example
-            title="Aligned equations"
+            title="Mermaid diagram"
             source={
-              "$$\n\\begin{aligned}\na &= b + c \\\\\nd &= e + f\n\\end{aligned}\n$$"
+              "```mermaid\nflowchart LR\n    A[Read paper] --> B[Take notes]\n    B --> C[Test an idea]\n```"
             }
           />
-        </section>
-        <section className="format-example">
-          <h2>Paragraphs, images, and literal characters</h2>
-          <p>
-            Leave a blank line between paragraphs. End a line with two spaces
-            for a line break within a paragraph. Put a backslash before a
-            formatting character to show it literally: <code>{"\\*"}</code>{" "}
-            displays an asterisk.
-          </p>
-          <p>
-            Use <strong>Insert image</strong> in the editor to upload an image;
-            add an optional caption beneath it. External image URLs and raw HTML
-            are not rendered. Custom HTML colors, fonts, and underlines are not
-            supported.
-          </p>
-        </section>
-        <details className="format-advanced">
-          <summary>Diagrams and plots</summary>
-          <p>
-            Use Mermaid for diagrams and JSON for simple line or scatter plots
-            (2–200 points).
-          </p>
-          <div className="format-grid">
-            <Example
-              title="Mermaid diagram"
-              source={
-                "```mermaid\nflowchart LR\n    A[Read paper] --> B[Take notes]\n    B --> C[Test an idea]\n```"
-              }
-            />
-            <Example
-              title="Plot"
-              source={
-                '```plot\n{\n  "title": "Example results",\n  "xLabel": "Step",\n  "yLabel": "Score",\n  "type": "line",\n  "points": [\n    {"x": 1, "y": 2},\n    {"x": 2, "y": 5},\n    {"x": 3, "y": 9}\n  ]\n}\n```'
-              }
-            />
-          </div>
-        </details>
-      </div>
-    </main>
+          <Example
+            title="Plot"
+            source={
+              '```plot\n{\n  "title": "Example results",\n  "xLabel": "Step",\n  "yLabel": "Score",\n  "type": "line",\n  "points": [\n    {"x": 1, "y": 2},\n    {"x": 2, "y": 5},\n    {"x": 3, "y": 9}\n  ]\n}\n```'
+            }
+          />
+        </div>
+      </details>
+    </>
   );
 }

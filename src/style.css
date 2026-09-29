@@ -2,20 +2,20 @@
 @import "pdfjs-dist/web/pdf_viewer.css" layer(pdfjs);
 :root {
   font-family: "IBM Plex Sans", sans-serif;
-  color: #ececef;
-  background: #18181b;
+  color: #eeeae4;
+  background: #1c1d20;
   font-synthesis: none;
-  --bg: #18181b;
-  --sidebar: #131315;
-  --surface: #202023;
-  --surface2: #28282d;
-  --border: #39393f;
-  --text: #ececef;
-  --muted: #a1a1aa;
-  --accent: #f59a56;
+  --bg: #1c1d20;
+  --sidebar: #242529;
+  --surface: #242529;
+  --surface2: #2e3035;
+  --border: #3b3d42;
+  --text: #eeeae4;
+  --muted: #b1aea8;
+  --accent: #e8b68a;
   --accent-text: #24180e;
   --selected: color-mix(in srgb, var(--accent) 18%, var(--bg));
-  --rhythm-empty: #36363c;
+  --rhythm-empty: #3b3d42;
   --serif: "IBM Plex Sans", sans-serif;
   color-scheme: dark;
 }
@@ -710,7 +710,7 @@ small,
   border-left-color: var(--accent) !important;
 }
 .cm-selectionBackground {
-  background: #f59a5655 !important;
+  background: color-mix(in srgb, var(--accent) 33%, transparent) !important;
 }
 .cm-placeholder {
   color: var(--muted) !important;
@@ -2379,7 +2379,7 @@ a.goal-card:focus-visible {
 }
 .cm-content ::selection,
 .cm-content::selection {
-  background: #f59a5655;
+  background: color-mix(in srgb, var(--accent) 33%, transparent);
 }
 .main-shell > .markdown-help {
   max-width: none;
@@ -2448,5 +2448,72 @@ a.goal-card:focus-visible {
 @media (max-width: 800px) {
   .markdown-help-content {
     padding: 24px 20px 48px;
+  }
+}
+
+/* Calm desk: spacious standalone notes, compact shared formatting tools. */
+.daily-page {
+  width: 100%;
+  padding-inline: clamp(20px, 4vw, 48px);
+}
+.daily-page .entry-writing {
+  padding-top: 10px;
+}
+.daily-page .entry-date {
+  margin-bottom: 14px;
+}
+.daily-page .cm-content {
+  min-height: 420px;
+}
+.editor-toolbar {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+.editor-toolbar > button,
+.editor-toolbar select {
+  min-height: 32px;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+.editor-toolbar .row {
+  gap: 5px;
+}
+.format-select select {
+  width: auto;
+}
+.markdown-helper {
+  margin-left: auto;
+}
+.markdown-help-dialog {
+  width: min(960px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.guide-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+}
+.guide-dialog-scroll {
+  overflow: auto;
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+.markdown-help-dialog .markdown-help-content {
+  padding: 20px 24px;
+}
+@media (max-width: 650px) {
+  .daily-page .cm-content {
+    min-height: 300px;
+  }
+  .markdown-help-dialog .format-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

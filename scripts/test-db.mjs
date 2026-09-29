@@ -768,6 +768,23 @@ pass(
   "new operations retain owner isolation and private helpers are inaccessible",
 );
 
+await as("postgres");
+await db.exec(
+  await readFile(
+    "supabase/migrations/20260929231303_formatting_word_markers.sql",
+    "utf8",
+  ),
+);
+const formatted = await db.query(
+  "select journal_private.body_words($1) as words, journal_private.added_words($2::jsonb,$1) as added",
+  [
+    "1. existing\n2. words\n- [x] here",
+    JSON.stringify(["existing", "words", "here"]),
+  ],
+);
+assert.deepEqual(formatted.rows[0].words, ["existing", "words", "here"]);
+assert.equal(formatted.rows[0].added, 0);
+pass("ordered and task list formatting does not earn words");
 await db.close();
 console.log(
   `\n${checks} database behavior checks passed (real PostgreSQL via PGlite).`,

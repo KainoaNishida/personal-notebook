@@ -34,6 +34,9 @@ import {
   defaultHighlightStyle,
 } from "@codemirror/language";
 import { Code2, Eye, ImagePlus } from "lucide-react";
+import * as Dialog from "@radix-ui/react-dialog";
+import { MarkdownHelpContent } from "./MarkdownHelp";
+import { applyFormat, type Format } from "./formatting";
 import { Markdown } from "./Markdown";
 import type { Snapshot } from "../domain";
 type Context = {
@@ -288,7 +291,13 @@ export const Editor = forwardRef<
         extensions: [
           markdown({ codeLanguages: languages }),
           history(),
-          keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
+          keymap.of([
+            { key: "Mod-b", run: (v) => applyFormat(v, "bold") },
+            { key: "Mod-i", run: (v) => applyFormat(v, "italic") },
+            indentWithTab,
+            ...defaultKeymap,
+            ...historyKeymap,
+          ]),
           // Use the browser's caret and selection. A separately positioned
           // overlay can lag behind asynchronous preview layout and pane changes.
           syntaxHighlighting(defaultHighlightStyle),
@@ -366,7 +375,85 @@ export const Editor = forwardRef<
     <div
       className={`editor ${compact ? "compact" : ""} ${source ? "source-mode" : ""}`}
     >
-      <div className="editor-toolbar">
+      <div className="editor-toolbar" role="group" aria-label="Formatting">
+        <button
+          type="button"
+          aria-label="Bold"
+          title="Bold (Ctrl/Cmd+B)"
+          onClick={() => view.current && applyFormat(view.current, "bold")}
+        >
+          <strong>B</strong>
+        </button>
+        <button
+          type="button"
+          aria-label="Italic"
+          title="Italic (Ctrl/Cmd+I)"
+          onClick={() => view.current && applyFormat(view.current, "italic")}
+        >
+          <em>I</em>
+        </button>
+        {(
+          [
+            [
+              "Heading",
+              [
+                ["h1", "Heading 1"],
+                ["h2", "Heading 2"],
+                ["h3", "Heading 3"],
+              ],
+            ],
+            [
+              "Code",
+              [
+                ["inlineCode", "Inline code"],
+                ["code", "Code block"],
+              ],
+            ],
+            [
+              "Math",
+              [
+                ["inlineMath", "Inline math"],
+                ["math", "Display equation"],
+              ],
+            ],
+            [
+              "More",
+              [
+                ["bullet", "Bullet list"],
+                ["number", "Numbered list"],
+                ["task", "Task list"],
+                ["quote", "Block quote"],
+              ],
+            ],
+          ] as [string, [Format, string][]][]
+        ).map(([name, options]) => (
+          <label className="format-select" key={name}>
+            <span className="sr-only">{name}</span>
+            <select
+              aria-label={name}
+              value=""
+              onChange={(e) => {
+                if (view.current)
+                  applyFormat(view.current, e.target.value as Format);
+              }}
+            >
+              <option value="" disabled>
+                {name}
+              </option>
+              {options.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+        <button
+          type="button"
+          onClick={() => view.current && applyFormat(view.current, "link")}
+        >
+          Link
+        </button>
         <div className="row">
           {onUpload && (
             <button
@@ -386,6 +473,34 @@ export const Editor = forwardRef<
             {source ? <Eye size={16} /> : <Code2 size={16} />}
           </button>
         </div>
+        <Dialog.Root>
+          <Dialog.Trigger asChild>
+            <button type="button" className="markdown-helper">
+              Markdown guide
+            </button>
+          </Dialog.Trigger>
+          <Dialog.Portal>
+            <Dialog.Overlay className="modal-overlay" />
+            <Dialog.Content
+              className="modal markdown-help-dialog"
+              aria-describedby={undefined}
+            >
+              <div className="guide-dialog-header">
+                <Dialog.Title>Formatting reference</Dialog.Title>
+                <Dialog.Close aria-label="Close Markdown guide">
+                  Close
+                </Dialog.Close>
+              </div>
+              <div
+                className="guide-dialog-scroll"
+                tabIndex={0}
+                aria-label="Markdown guide content"
+              >
+                <MarkdownHelpContent />
+              </div>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
       </div>
       <input
         ref={input}

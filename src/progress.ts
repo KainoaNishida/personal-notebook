@@ -11,6 +11,10 @@ export function bodyWords(markdown: string): string[] {
       .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
       .replace(/^\s*\[[^\]]+\]:.*$/gm, " ")
       .replace(/^\s*```[^\n]*$/gm, " ")
+      .replace(
+        /^[ \t]*(?:>[ \t]*)*(?:[0-9]+[.)][ \t]+|[-+*][ \t]+\[[ xX]\][ \t]+)/gm,
+        "",
+      )
       .replace(/<[^>]*>/g, " ")
       .replace(/(?:https?:\/\/|asset:|annotation:)[^\s)]+/g, " ")
       .match(/[\p{L}\p{N}]+/gu) || []

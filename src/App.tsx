@@ -36,7 +36,6 @@ import {
   Upload,
   Sparkles,
   Link2,
-  BookText,
 } from "lucide-react";
 import {
   ofKind,
@@ -154,7 +153,6 @@ function Workspace() {
           {[
             [CalendarDays, "Today", "/"],
             [BookOpen, "Notebooks", "/notebooks"],
-            [BookText, "Markdown guide", "/help/markdown"],
           ].map(([Icon, label, path]) => {
             const I = Icon as typeof CalendarDays;
             return (
@@ -1214,8 +1212,8 @@ function SettingsPage({
   const save = useSave(),
     setting = ofKind(records, "settings")[0],
     [tz, setTz] = useState(settings.timezone),
-    [mainColor, setMainColor] = useState(settings.mainColor || "#18181b"),
-    [accentColor, setAccentColor] = useState(settings.accentColor || "#f59a56"),
+    [mainColor, setMainColor] = useState(settings.mainColor || "#1c1d20"),
+    [accentColor, setAccentColor] = useState(settings.accentColor || "#e8b68a"),
     [message, setMessage] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -1314,8 +1312,8 @@ function SettingsPage({
           </button>
           <button
             onClick={() => {
-              setMainColor("#18181b");
-              setAccentColor("#f59a56");
+              setMainColor("#1c1d20");
+              setAccentColor("#e8b68a");
               void save(
                 "settings",
                 setting?.id || uid(),

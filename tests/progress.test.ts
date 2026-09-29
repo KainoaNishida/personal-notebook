@@ -57,5 +57,5 @@ it("normalizes legacy light appearances while retaining accent customization", (
   });
   expect(result["--bg"]).toBe(darkBackgrounds[0]);
   expect(result["--accent"]).toBe("#00ff00");
-  expect(result["--text"]).toBe("#fafafa");
+  expect(result["--text"]).toBe("#eeeae4");
 });
