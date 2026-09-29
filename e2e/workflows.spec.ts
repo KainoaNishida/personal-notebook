@@ -1006,7 +1006,9 @@ test("Calm desk formatting preserves selection, undo, drafts and helper scrollin
   await expect(editor).toHaveText("**A useful thought**");
   await editor.press("ControlOrMeta+z");
   await expect(editor).toHaveText("A useful thought");
-  await editor.press("ControlOrMeta+Shift+z");
+  await editor.press(
+    process.platform === "darwin" ? "Meta+Shift+z" : "Control+y",
+  );
   await expect(editor).toHaveText("**A useful thought**");
   await editor.press("ControlOrMeta+z");
   await editor.press("ControlOrMeta+a");

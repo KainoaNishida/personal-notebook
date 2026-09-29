@@ -21,3 +21,5 @@ The optional private attention-PDF test remains skipped without its external fix
 Testing found existing numbered-list markers earned body-word credit. An additive function-only migration, `formatting_word_markers`, and the matching browser normalization exclude ordered-list and task-checkbox markers. This is necessary for toolbar formatting to remain neutral. No table schema, saved content, prior completion, backup format, or authorization changes were made. The migration was applied before the frontend release and a hosted synthetic query confirmed zero added words.
 
 Database security review retained existing owner-checked RPCs and deny-all internal tables. Existing Supabase leaked-password protection and production-origin configuration concerns remain separate deployment items. Supabase function documentation: https://supabase.com/docs/guides/database/functions
+
+CI initially exposed a platform-specific redo test shortcut: CodeMirror uses Cmd+Shift+Z on macOS and Ctrl+Y on Linux/Windows. The browser test now selects the platform shortcut.
