@@ -1,3 +1,4 @@
+import { TimeCalculator } from "./components/TimeCalculator";
 import { APP_NAME } from "./branding";
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import type { CSSProperties, FormEvent } from "react";
@@ -561,6 +562,7 @@ function Today({
           </table>
         </div>
       </section>
+      <TimeCalculator key={date} date={date} />
       <div className="today-reflection">
         <section>
           <div className="section-heading">

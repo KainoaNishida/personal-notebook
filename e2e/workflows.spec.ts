@@ -1086,3 +1086,38 @@ test("Calm desk formatting preserves selection, undo, drafts and helper scrollin
   ).toHaveCount(0);
   await page.screenshot({ path: "test-results/calm-today.png" });
 });
+
+test("daily time calculator multiplies durations and restores only today's list", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const times = page.getByRole("textbox", {
+    name: "Times (MM:SS, separated by commas)",
+  });
+  const total = page.getByLabel("Time total multiplied by seven");
+  await times.fill("10:00");
+  await expect(total).toHaveText("01:10:00");
+  await times.fill("10:00, 10:00");
+  await expect(total).toHaveText("02:20:00");
+  await page.reload();
+  await expect(times).toHaveValue("10:00, 10:00");
+  await times.fill("10:60");
+  await expect(times).toHaveAttribute("aria-invalid", "true");
+  await expect(total).toHaveText("—");
+  await times.fill("");
+  await expect(total).toHaveText("00:00:00");
+  await page.evaluate(() =>
+    localStorage.setItem(
+      "kais-notebook:time-calculator:preview",
+      JSON.stringify({ date: "2000-01-01", input: "10:00" }),
+    ),
+  );
+  await page.reload();
+  await expect(times).toHaveValue("");
+  await page.setViewportSize({ width: 640, height: 900 });
+  expect(
+    await page
+      .locator(".time-calculator-card")
+      .evaluate((el) => el.scrollWidth <= el.clientWidth),
+  ).toBe(true);
+});
