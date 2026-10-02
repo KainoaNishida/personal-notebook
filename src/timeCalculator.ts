@@ -22,12 +22,19 @@ export function calculateTimes(
       };
   }
   const multiplied = seconds * 7;
-  const total = [
-    Math.floor(multiplied / 3600),
-    Math.floor(multiplied / 60) % 60,
-    multiplied % 60,
+  return {
+    valid: true,
+    total: formatDuration(multiplied),
+    count: items.length,
+  };
+}
+
+export function formatDuration(seconds: number): string {
+  return [
+    Math.floor(seconds / 3600),
+    Math.floor(seconds / 60) % 60,
+    seconds % 60,
   ]
     .map((value) => String(value).padStart(2, "0"))
     .join(":");
-  return { valid: true, total, count: items.length };
 }

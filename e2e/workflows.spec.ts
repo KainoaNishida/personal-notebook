@@ -1121,3 +1121,51 @@ test("daily time calculator multiplies durations and restores only today's list"
       .evaluate((el) => el.scrollWidth <= el.clientWidth),
   ).toBe(true);
 });
+
+test("actual work time accumulates browser earnings across edits, reloads, and midnight", async ({
+  page,
+}) => {
+  await page.clock.install({ time: new Date("2026-10-02T19:00:00Z") });
+  await page.goto("/");
+  const actual = page.getByRole("textbox", {
+    name: "Actual time worked (HH:MM:SS)",
+  });
+  const dailyEarnings = page.getByLabel("Today's earnings");
+  const allEarnings = page.getByLabel("All-time earnings");
+  await expect(allEarnings).toHaveText("$1,464.47");
+  await page
+    .getByRole("textbox", { name: "Times (MM:SS, separated by commas)" })
+    .fill("10:00, 10:00");
+  await expect(page.getByLabel("Time total multiplied by seven")).toHaveText(
+    "02:20:00",
+  );
+  await actual.fill("01:30:00");
+  await expect(dailyEarnings).toHaveText("$120.00");
+  await expect(allEarnings).toHaveText("$1,584.47");
+  await actual.fill("02:00:00");
+  await expect(allEarnings).toHaveText("$1,624.47");
+  await page.reload();
+  await expect(actual).toHaveValue("02:00:00");
+  await expect(allEarnings).toHaveText("$1,624.47");
+  await page.clock.setSystemTime(new Date("2026-10-03T19:00:00Z"));
+  await page.clock.runFor(1000);
+  await expect(actual).toHaveValue("");
+  await expect(dailyEarnings).toHaveText("$0.00");
+  await expect(allEarnings).toHaveText("$1,624.47");
+  await actual.fill("00:30:00");
+  await expect(allEarnings).toHaveText("$1,664.47");
+  await expect(page.getByLabel("All-time hours")).toHaveText("20:48:21");
+  await page
+    .locator(".time-calculator-card")
+    .screenshot({ path: "test-results/time-earnings-desktop.png" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(actual).toBeVisible();
+  expect(
+    await page
+      .locator(".time-calculator-card")
+      .evaluate((el) => el.scrollWidth <= el.clientWidth),
+  ).toBe(true);
+  await page
+    .locator(".time-calculator-card")
+    .screenshot({ path: "test-results/time-earnings-mobile.png" });
+});

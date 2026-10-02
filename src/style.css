@@ -2551,9 +2551,40 @@ a.goal-card:focus-visible {
   gap: 6px;
   min-width: 190px;
 }
-.time-calculator-total output {
+.time-calculator-total > output {
   font-family: "IBM Plex Mono", monospace;
   font-size: 28px;
   color: var(--accent);
   overflow-wrap: anywhere;
+}
+.time-calculator-actual {
+  margin-top: 20px;
+}
+.time-calculator-earnings {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+}
+.time-calculator-earnings > div {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+.time-calculator-earnings dt {
+  color: var(--muted);
+}
+.time-calculator-earnings dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.time-calculator-hours,
+.time-calculator-baseline {
+  margin: 0;
+}
+.time-calculator-hours {
+  margin-top: 6px;
+}
+.time-calculator-baseline {
+  max-width: 240px;
 }
