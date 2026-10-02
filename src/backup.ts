@@ -1,3 +1,4 @@
+import { APP_SLUG } from "./branding";
 import JSZip from "jszip";
 import { z } from "zod";
 import { kinds, uid, ofKind, responseSchema, visualSchema } from "./domain";
@@ -240,7 +241,7 @@ export async function exportArchive(records: Snapshot) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `kais-journal-${new Date().toISOString().slice(0, 10)}.zip`;
+  a.download = `${APP_SLUG}-${new Date().toISOString().slice(0, 10)}.zip`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

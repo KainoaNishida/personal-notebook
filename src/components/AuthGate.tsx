@@ -1,3 +1,4 @@
+import { APP_NAME } from "../branding";
 import { useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -97,8 +98,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       setBusy(false);
     }
   }
-  if (!ready)
-    return <div className="loading-screen">Opening Kai’s Journal…</div>;
+  if (!ready) return <div className="loading-screen">Opening {APP_NAME}…</div>;
   if (signed && mode !== "recovery") return <>{children}</>;
   const expired = mode === "recovery" && !signed;
   return (

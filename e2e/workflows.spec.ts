@@ -322,6 +322,9 @@ test("notebook management and archive export restore", async ({ page }) => {
   const pending = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export archive" }).click();
   const download = await pending;
+  expect(download.suggestedFilename()).toMatch(
+    /^kais-notebook-\d{4}-\d{2}-\d{2}\.zip$/,
+  );
   const path = (await download.path())!;
   await page.locator("input[type=file]").setInputFiles(path);
   await expect(page.getByText(/Restored \d+ records/)).toBeVisible();
@@ -866,6 +869,11 @@ test("whole goal cards navigate and the Markdown guide is accessible", async ({
   context,
 }) => {
   await page.goto("/");
+  await expect(page).toHaveTitle("Kai’s Notebook");
+  await expect(
+    page.getByRole("link", { name: "Kai’s Notebook home" }),
+  ).toBeVisible();
+  await expect(page.getByText("Kai’s Journal", { exact: true })).toHaveCount(0);
   const card = page.locator(".goal-card").filter({ hasText: "System design" });
   await expect(card).toHaveAttribute("href", /\/notebooks\//);
   const box = (await card.boundingBox())!;

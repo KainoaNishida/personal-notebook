@@ -356,7 +356,7 @@ export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
   };
 }
 
-export function useJournalDate(timezone: string) {
+export function useNotebookDate(timezone: string) {
   const [date, setDate] = useState(() => today(timezone));
   useEffect(() => {
     const update = () => setDate(today(timezone));

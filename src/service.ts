@@ -65,9 +65,9 @@ function sample(): Snapshot {
       data: {
         notebookId: ns[0].id,
         date: today(),
-        title: "Journal setup",
+        title: "Notebook setup",
         markdown:
-          "# Journal setup\n\nThis is a local preview. Hosted notes are stored separately.",
+          "# Notebook setup\n\nThis is a local preview. Hosted notes are stored separately.",
       },
     },
   ];

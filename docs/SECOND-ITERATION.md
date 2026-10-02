@@ -9,7 +9,7 @@ Scope: the second-iteration feedback tab only, based on `ec51a86`. The Google Do
 | Feedback | Implementation |
 | --- | --- |
 | 1, 11 | Viewport-bounded application shell, internally scrolling sidebar/content/PDF/notes, explicit sidebar spacing and contained overscroll. |
-| 2, 18 | Current-day-only heading with full date. `useJournalDate` follows the journal timezone and updates at midnight, focus, and visibility changes. Historical pages live in notebook indexes. |
+| 2, 18 | Current-day-only heading with full date. `useNotebookDate` follows the journal timezone and updates at midnight, focus, and visibility changes. Historical pages live in notebook indexes. |
 | 3 | Integer minutes per notebook/date, hours/minutes controls, today total, historical daily editing and date/notebook filters. Saving research time associates an optional paper without adding minutes to the study record. |
 | 4 | Topic-tree proposal below; no taxonomy or automatic classification has been implemented. |
 | 5–8 | Newest-first dated sections, today’s empty section, date/title outline, one active editor, inactive Markdown. Old entry links select the corresponding section. Secondary section menu holds recoverable deletion. |

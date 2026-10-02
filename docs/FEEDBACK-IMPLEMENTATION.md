@@ -18,7 +18,7 @@ This update implements the 21 approved items from the owner's feedback document.
 | 12 | Today reflection and the Life notebook use the same daily entry. Legacy nonempty reflections are migrated. |
 | 13 | Removed slogans and hid the original seeded notebook taglines. Custom descriptions remain available. |
 | 14 | Removed the private/just-for-you label. |
-| 15 | Visible branding is Kai’s Journal. Existing URLs and recovery-storage keys are preserved. |
+| 15 | Visible branding was Kai’s Journal at this release (renamed Kai’s Notebook in October 2026). Existing URLs and recovery-storage keys are preserved. |
 | 16 | Charcoal/orange default with synchronized main/accent color controls. |
 | 17 | IBM Plex Sans for prose/UI, IBM Plex Mono for code/source, KaTeX fonts for equations. |
 | 18 | Collapsible conflict review offers saved/window/merged versions. JSONB key order no longer causes false conflicts. |

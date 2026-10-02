@@ -9,7 +9,7 @@ import {
 } from "../src/domain";
 import { EditorState } from "@codemirror/state";
 import { previewRanges } from "../src/components/Editor";
-describe("journal dates", () => {
+describe("notebook dates", () => {
   it("uses the selected timezone across midnight", () => {
     expect(today("America/Los_Angeles", new Date("2026-09-23T03:00:00Z"))).toBe(
       "2026-09-22",

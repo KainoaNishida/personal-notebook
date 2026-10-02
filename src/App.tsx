@@ -1,3 +1,4 @@
+import { APP_NAME } from "./branding";
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import type { CSSProperties, FormEvent } from "react";
 import {
@@ -54,11 +55,11 @@ import type {
   AnyRecord,
 } from "./domain";
 import * as api from "./service";
-import { NotebookIndex, ResearchTimeline } from "./components/JournalViews";
+import { NotebookIndex, ResearchTimeline } from "./components/NotebookViews";
 import { EntryLabels } from "./components/Labels";
 import { ColorSelector, validColor } from "./components/ColorSelector";
 import { MarkdownHelp } from "./components/MarkdownHelp";
-import { useRecords, useSave, useDraft, useJournalDate } from "./hooks";
+import { useRecords, useSave, useDraft, useNotebookDate } from "./hooks";
 import { DraftStatus } from "./components/DraftStatus";
 import { DailyEntry } from "./components/DailyEntry";
 import { Splitter } from "./components/Splitter";
@@ -144,9 +145,9 @@ function Workspace() {
   return (
     <div className={`app-shell ${collapsed ? "collapsed" : ""}`}>
       <aside className="app-sidebar">
-        <Link to="/" className="brand" aria-label="Kai’s Journal home">
+        <Link to="/" className="brand" aria-label={`${APP_NAME} home`}>
           <BookOpen size={23} />
-          <span>Kai’s Journal</span>
+          <span>{APP_NAME}</span>
         </Link>
 
         <nav>
@@ -194,7 +195,7 @@ function Workspace() {
           >
             <span className="avatar">K</span>
             <span>
-              Kai’s Journal
+              {APP_NAME}
               <small>{api.demo ? "Sample workspace" : "Owner account"}</small>
             </span>
             <LogOut size={16} />
@@ -385,7 +386,7 @@ function Today({
   records: Snapshot;
   settings: Settings;
 }) {
-  const date = useJournalDate(settings.timezone);
+  const date = useNotebookDate(settings.timezone);
   const ns = ofKind(records, "notebook")
       .filter((n) => !n.data.archived)
       .sort((a, b) => a.data.order - b.data.order),
@@ -761,7 +762,7 @@ function NotebookPage({
   settings: Settings;
 }) {
   const { id } = useParams();
-  const date = useJournalDate(settings.timezone);
+  const date = useNotebookDate(settings.timezone);
   const [params] = useSearchParams();
   const notebook = ofKind(records, "notebook").find((n) => n.id === id);
   if (!notebook)
@@ -1034,7 +1035,7 @@ function PaperPage({
     notebooks.find((n) => n.id === entry?.data.notebookId) ||
     notebooks.find((n) => n.data.research && n.id === params.get("notebook")) ||
     notebooks.find((n) => n.data.research);
-  const studyDate = useJournalDate(settings.timezone);
+  const studyDate = useNotebookDate(settings.timezone);
   useEffect(() => {
     if (notebook && paper)
       void api
@@ -1229,7 +1230,7 @@ function SettingsPage({
         { ...settings, timezone: tz },
         setting?.revision || 0,
       );
-      setMessage("Timezone saved. Existing journal dates are unchanged.");
+      setMessage("Timezone saved. Existing entry dates are unchanged.");
     } catch (e) {
       setError((e as Error).message);
     }
@@ -1329,13 +1330,13 @@ function SettingsPage({
         </div>
       </section>
       <section className="settings-card">
-        <h2>Your journal day</h2>
+        <h2>Your notebook day</h2>
         <p className="muted">
           Today follows your timezone. Entry dates are assigned automatically.
         </p>
         <div className="row">
           <input
-            aria-label="Journal timezone"
+            aria-label="Notebook timezone"
             value={tz}
             onChange={(e) => setTz(e.target.value)}
             list="timezones"
@@ -1423,7 +1424,7 @@ function SettingsPage({
             </div>
           ))}
       </section>
-      <p className="small muted">Kai’s Journal</p>
+      <p className="small muted">{APP_NAME}</p>
     </main>
   );
 }
