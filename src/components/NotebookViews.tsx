@@ -89,7 +89,11 @@ export function NotebookIndex({ records }: { records: Snapshot }) {
       <div className="row between">
         <h1>{notebook.data.name}</h1>
         <Link to={`/notebooks/${id}`}>
-          {notebook.data.research ? "Open timeline" : "Write today"}
+          {notebook.data.research
+            ? "Open timeline"
+            : notebook.data.reading
+              ? "Open reading log"
+              : "Write today"}
         </Link>
       </div>
       <div className="index-toolbar">

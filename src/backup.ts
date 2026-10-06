@@ -4,6 +4,7 @@ import { z } from "zod";
 import { kinds, uid, ofKind, responseSchema, visualSchema } from "./domain";
 import type { Snapshot, AnyRecord, Asset } from "./domain";
 import * as api from "./service";
+import { readingSchema, validateReadingEntry } from "./reading";
 const id = z.string().uuid(),
   date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const schemas: Record<string, z.ZodType> = {
@@ -20,6 +21,7 @@ const schemas: Record<string, z.ZodType> = {
     order: z.number(),
     archived: z.boolean(),
     research: z.boolean().optional(),
+    reading: z.boolean().optional(),
   }),
   entry: z.object({
     title: z.string(),
@@ -29,6 +31,7 @@ const schemas: Record<string, z.ZodType> = {
     paperId: id.optional(),
     mergedInto: id.optional(),
     labelIds: z.array(id).optional(),
+    reading: readingSchema.optional(),
   }),
   day: z.object({
     date,
@@ -120,7 +123,12 @@ const envelope = z.object({
 export function validateManifest(input: unknown): Snapshot {
   const parsed = z
     .object({
-      version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+      version: z.union([
+        z.literal(1),
+        z.literal(2),
+        z.literal(3),
+        z.literal(4),
+      ]),
       records: z.array(envelope).max(20000),
     })
     .parse(input);
@@ -133,6 +141,16 @@ export function validateManifest(input: unknown): Snapshot {
   const result = parsed.records as Snapshot;
   const byId = new Map(result.map((r) => [r.id, r]));
   for (const r of result) {
+    if (r.kind === "entry" && r.data.reading) {
+      validateReadingEntry(r.data);
+      const notebook = byId.get(r.data.notebookId);
+      if (
+        notebook?.kind !== "notebook" ||
+        !notebook.data.reading ||
+        notebook.data.research
+      )
+        throw new Error("Archive has an invalid reading notebook.");
+    }
     const data = r.data as unknown as Record<string, unknown>;
     for (const [key, kind] of Object.entries({
       notebookId: "notebook",
@@ -207,7 +225,10 @@ export async function exportArchive(records: Snapshot) {
   for (const entry of ofKind(records, "entry")) {
     zip.file(
       `entries/${entry.id}.md`,
-      entry.data.markdown
+      (entry.data.reading
+        ? `# ${entry.data.title}\n\nDate: ${entry.data.date}\nMinutes: ${entry.data.reading.minutes}\n${entry.data.reading.author ? `Author: ${entry.data.reading.author}\n` : ""}\n${entry.data.markdown}`
+        : entry.data.markdown
+      )
         .replace(/asset:([\w-]+)/g, "../assets/$1")
         .replace(/annotation:([\w-]+)/g, "../annotations/$1.md"),
     );
@@ -231,7 +252,7 @@ export async function exportArchive(records: Snapshot) {
     "manifest.json",
     JSON.stringify(
       {
-        version: 3,
+        version: 4,
         exportedAt: new Date().toISOString(),
         records: exportRecords,
       },

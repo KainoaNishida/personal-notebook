@@ -10,7 +10,12 @@ export function DraftStatus({
     error: string;
     recoveryNotice: string;
     conflict: AnyRecord | null;
-    value: { markdown: string };
+    value: {
+      markdown: string;
+      title?: string;
+      date?: string;
+      reading?: { minutes: number; author: string };
+    };
     change: (value: never) => void;
     acceptRemote: () => void;
     keepMine: () => Promise<void>;
@@ -23,7 +28,13 @@ export function DraftStatus({
   const [failure, setFailure] = useState("");
   const saved = draft.status === "Saved" && !draft.error && !draft.conflict;
   const remote = draft.conflict?.data as
-    { markdown?: string; title?: string } | undefined;
+    | {
+        markdown?: string;
+        title?: string;
+        date?: string;
+        reading?: { minutes: number; author: string };
+      }
+    | undefined;
   async function resolve(action: () => void | Promise<void>) {
     setFailure("");
     try {
@@ -59,11 +70,23 @@ export function DraftStatus({
               <div className="version-columns">
                 <div>
                   <h3>This window</h3>
+                  {draft.value.reading && (
+                    <p>
+                      {draft.value.title} · {draft.value.reading.author} ·{" "}
+                      {draft.value.date} · {draft.value.reading.minutes} minutes
+                    </p>
+                  )}
                   <pre>{draft.value.markdown}</pre>
                 </div>
                 <div>
                   <h3>Saved version</h3>
                   <p>{remote?.title}</p>
+                  {remote?.reading && (
+                    <p>
+                      {remote.reading.author} · {remote.date} ·{" "}
+                      {remote.reading.minutes} minutes
+                    </p>
+                  )}
                   <pre>{remote?.markdown}</pre>
                 </div>
               </div>

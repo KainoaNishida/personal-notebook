@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 import { chromium } from "@playwright/test";
 import assert from "node:assert/strict";
+const port = process.env.PRODUCTION_TEST_PORT || "5175";
+const origin = `http://127.0.0.1:${port}`;
 const server = spawn(
   process.execPath,
   [
@@ -9,7 +11,7 @@ const server = spawn(
     "--host",
     "127.0.0.1",
     "--port",
-    "5175",
+    port,
     "--strictPort",
   ],
   { stdio: "pipe", windowsHide: true },
@@ -21,7 +23,7 @@ try {
     if (server.exitCode !== null)
       throw new Error("Production preview server exited");
     try {
-      ready = (await fetch("http://127.0.0.1:5175")).ok;
+      ready = (await fetch(origin)).ok;
     } catch {}
     if (ready) break;
     await new Promise((r) => setTimeout(r, 100));
@@ -29,7 +31,7 @@ try {
   assert(ready, "Production preview did not start");
   browser = await chromium.launch();
   const page = await browser.newPage();
-  await page.goto("http://127.0.0.1:5175");
+  await page.goto(origin);
   await page.getByRole("heading", { name: "Password to enter" }).waitFor();
   assert.equal(await page.locator("input[type=email]").count(), 0);
   if (await page.locator('input[type="password"]').count()) {
@@ -58,7 +60,7 @@ try {
   await page.evaluate(() =>
     localStorage.setItem("commonplace:preview:v1", "[]"),
   );
-  await page.goto("http://127.0.0.1:5175/papers");
+  await page.goto(`${origin}/papers`);
   await page.getByRole("heading", { name: "Password to enter" }).waitFor();
   assert.equal(
     await page.getByRole("button", { name: "Add a paper" }).count(),

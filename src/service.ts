@@ -1,5 +1,6 @@
 import { bodyWords, addedWords, normalizeLabel } from "./progress";
 import { totalWorkedSeconds, validSeconds } from "./workTime";
+import { validateReadingEntry } from "./reading";
 import { createClient } from "@supabase/supabase-js";
 import type { Session } from "@supabase/supabase-js";
 import {
@@ -120,6 +121,10 @@ export async function list(): Promise<Snapshot> {
             data: {
               ...r.data,
               research: r.data.research ?? r.data.icon === "science",
+              reading:
+                r.data.reading ??
+                (!r.data.research &&
+                  r.data.name.trim().toLowerCase() === "reading"),
             },
           }
         : r,
@@ -154,7 +159,12 @@ export async function save<K extends Kind>(
     const all = preview(),
       i = all.findIndex((r) => r.id === id),
       old = all[i];
-    if (!old && kind === "entry" && !deletedAt) {
+    if (
+      !old &&
+      kind === "entry" &&
+      !deletedAt &&
+      !(data as DataMap["entry"]).reading
+    ) {
       const entry = data as DataMap["entry"];
       const prior = all.find(
         (r) =>
@@ -164,6 +174,7 @@ export async function save<K extends Kind>(
           (entry.paperId
             ? r.data.paperId === entry.paperId
             : !r.data.paperId &&
+              !r.data.reading &&
               r.data.notebookId === entry.notebookId &&
               r.data.date === entry.date),
       );
@@ -187,6 +198,29 @@ export async function save<K extends Kind>(
     }
     if (kind === "entry") {
       const entry = data as DataMap["entry"];
+      if (entry.reading) {
+        validateReadingEntry(entry);
+        if (
+          !all.some(
+            (r) =>
+              r.kind === "notebook" &&
+              r.id === entry.notebookId &&
+              r.data.reading &&
+              !r.data.research,
+          )
+        )
+          throw new Error("Reading sessions require a reading notebook.");
+      }
+      if (
+        old?.kind === "entry" &&
+        Boolean(old.data.reading) !== Boolean(entry.reading)
+      )
+        throw new Error("Entry type cannot change.");
+      if (
+        old?.kind === "entry" &&
+        old.data.reading?.createdAt !== entry.reading?.createdAt
+      )
+        throw new Error("Reading session identity cannot change.");
       if (
         entry.labelIds?.some(
           (labelId) =>
@@ -546,6 +580,7 @@ export async function restoreBatch(records: Snapshot) {
       }
       if (
         record.kind === "entry" &&
+        !record.data.reading &&
         !record.deleted_at &&
         !record.data.mergedInto
       ) {
@@ -558,6 +593,7 @@ export async function restoreBatch(records: Snapshot) {
             (incoming.paperId
               ? r.data.paperId === incoming.paperId
               : !r.data.paperId &&
+                !r.data.reading &&
                 r.data.notebookId === incoming.notebookId &&
                 r.data.date === incoming.date),
         );

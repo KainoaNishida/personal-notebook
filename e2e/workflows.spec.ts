@@ -413,7 +413,7 @@ test("long research notes preserve preview nodes, cursor, scroll and undo across
 test("label creation, filtering, editing and shared color controls", async ({
   page,
 }) => {
-  const book = "00000000-0000-4000-8000-000000000004";
+  const book = "00000000-0000-4000-8000-000000000002";
   await page.goto(`/notebooks/${book}`);
   await page
     .getByRole("textbox", { name: "Entry title" })

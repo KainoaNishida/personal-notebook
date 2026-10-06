@@ -6,6 +6,8 @@ This notebook is for my own use, at least for now.
 
 The [Graphite interface](docs/GRAPHITE.md) uses a spacious writing canvas, a responsive navigation drawer, and self-hosted typography. Today retains its 14-day Activity tracker and account-synced hours.
 
+The [Reading log](docs/READING-LOG.md) tracks books, minutes, dates, and optional expandable notes, with account sync and newest sessions first.
+
 ## Development
 
 Use Node 24, then run `npm ci` and `npm run dev`. See [deployment and configuration](docs/DEPLOYMENT.md) for setup.

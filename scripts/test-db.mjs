@@ -911,6 +911,286 @@ pass(
   "work time archives restore once, preserve conflicting hours, and retain read isolation",
 );
 
+{
+  // Reading migration preserves original daily notes and adds independent sessions.
+  await as("authenticated", owner);
+  const readingBook = randomUUID(),
+    legacyReading = randomUUID();
+  const readingNotebookData = {
+    name: "Reading",
+    description: "",
+    icon: "reading",
+    color: "#b7cba3",
+    order: 10,
+    archived: false,
+    research: false,
+  };
+  await save(readingBook, "notebook", readingNotebookData);
+  await db.query("select restore_records($1)", [
+    JSON.stringify([
+      {
+        id: legacyReading,
+        kind: "entry",
+        data: {
+          notebookId: readingBook,
+          date: "2026-09-01",
+          title: "Earlier reading",
+          markdown: "Original notes",
+        },
+        deleted_at: null,
+      },
+    ]),
+  ]);
+  await as("postgres");
+  await db.exec(
+    await readFile(
+      "supabase/migrations/20261006042600_reading_log.sql",
+      "utf8",
+    ),
+  );
+  await as("authenticated", owner);
+  assert.equal(
+    (
+      await db.query(
+        "select data->>'reading' as reading from records where id=$1",
+        [readingBook],
+      )
+    ).rows[0].reading,
+    "true",
+  );
+  assert.equal(
+    (
+      await db.query(
+        "select data->>'markdown' as body from records where id=$1",
+        [legacyReading],
+      )
+    ).rows[0].body,
+    "Original notes",
+  );
+  assert.equal(
+    (
+      await db.query(
+        "select data->>'reading' as reading from records where id=$1",
+        [notebook],
+      )
+    ).rows[0].reading,
+    "false",
+  );
+  const renamed = await save(
+    readingBook,
+    "notebook",
+    { ...readingNotebookData, name: "Books", reading: false },
+    2,
+  );
+  assert.equal(renamed.record.data.reading, true);
+  pass("reading rollout retains earlier notes and pins layout through renames");
+  const sessionData = {
+    notebookId: readingBook,
+    date: day,
+    title: "A Book",
+    markdown: "",
+    reading: {
+      minutes: 30,
+      author: "An Author",
+      createdAt: new Date().toISOString(),
+    },
+  };
+  const sessionA = randomUUID(),
+    sessionB = randomUUID();
+  let readingSaved = await save(sessionA, "entry", sessionData);
+  await save(sessionB, "entry", sessionData);
+  const readingActivity = async () =>
+    (
+      await db.query(
+        "select data from records where kind='activity' and data->>'notebookId'=$1 and data->>'date'=$2",
+        [readingBook, day],
+      )
+    ).rows[0]?.data;
+  assert.equal((await readingActivity())?.completed || false, false);
+  const duplicateReading = await save(sessionA, "entry", sessionData);
+  assert.equal(duplicateReading.conflict, true);
+  assert.equal(duplicateReading.record.id, sessionA);
+  const ordinarySameDay = await save(randomUUID(), "entry", {
+    ...writingData,
+    notebookId: readingBook,
+    markdown: "",
+  });
+  assert.equal(ordinarySameDay.conflict, false);
+  assert.equal(
+    (
+      await save(randomUUID(), "entry", {
+        ...writingData,
+        notebookId: readingBook,
+        markdown: "",
+      })
+    ).conflict,
+    true,
+  );
+  assert.equal(
+    (
+      await db.query(
+        "select count(*)::int n from records where kind='entry' and data->>'notebookId'=$1 and data->>'date'=$2 and data ? 'reading'",
+        [readingBook, day],
+      )
+    ).rows[0].n,
+    2,
+  );
+  pass(
+    "same-day reading sessions remain distinct while ordinary daily uniqueness is retained",
+  );
+  for (const minutes of [0, -1, 1.5, "30", null, 1441])
+    await assert.rejects(() =>
+      save(randomUUID(), "entry", {
+        ...sessionData,
+        reading: { ...sessionData.reading, minutes },
+      }),
+    );
+  await assert.rejects(
+    () => save(randomUUID(), "entry", { ...sessionData, title: " " }),
+    /Book title/,
+  );
+  await assert.rejects(
+    () => save(randomUUID(), "entry", { ...sessionData, notebookId: notebook }),
+    /reading notebook/,
+  );
+  await assert.rejects(
+    () =>
+      save(randomUUID(), "entry", {
+        ...sessionData,
+        reading: { ...sessionData.reading, createdAt: "not-a-date" },
+      }),
+    /creation time/,
+  );
+  const { reading: _reading, ...withoutReading } = sessionData;
+  await assert.rejects(
+    () => save(sessionA, "entry", withoutReading, 1),
+    /type cannot change/,
+  );
+  await assert.rejects(
+    () =>
+      save(
+        sessionA,
+        "entry",
+        {
+          ...sessionData,
+          reading: {
+            ...sessionData.reading,
+            createdAt: "2026-10-01T12:00:00Z",
+          },
+        },
+        1,
+      ),
+    /identity cannot change/,
+  );
+  pass(
+    "reading validation rejects invalid minutes, books, layout, and identity changes",
+  );
+  const editedSession = {
+    ...sessionData,
+    date: "2026-09-30",
+    title: "A corrected title",
+    reading: { ...sessionData.reading, minutes: 45 },
+  };
+  readingSaved = await save(sessionA, "entry", editedSession, 1);
+  assert.equal(readingSaved.conflict, false);
+  assert.equal(readingSaved.record.data.date, "2026-09-30");
+  const staleSession = await save(sessionA, "entry", sessionData, 1);
+  assert.equal(staleSession.conflict, true);
+  assert.equal(staleSession.record.data.reading.minutes, 45);
+  assert.equal((await readingActivity())?.completed || false, false);
+  assert.ok(
+    (
+      await db.query("select * from record_versions where record_id=$1", [
+        sessionA,
+      ])
+    ).rows.length >= 1,
+  );
+  readingSaved = await save(
+    sessionA,
+    "entry",
+    { ...editedSession, markdown: "one two three four" },
+    readingSaved.record.revision,
+  );
+  assert.equal((await readingActivity())?.completed || false, false);
+  await save(sessionB, "entry", { ...sessionData, markdown: "five" }, 1);
+  assert.equal((await readingActivity()).completed, true);
+  await save(sessionA, "entry", editedSession, readingSaved.record.revision);
+  assert.equal((await readingActivity()).completed, true);
+  pass(
+    "metadata edits use revisions and only saved note words contribute to the latched daily goal",
+  );
+  const restoreReadingBook = randomUUID();
+  const restoredSessions = [randomUUID(), randomUUID()].map((id) => ({
+    id,
+    kind: "entry",
+    data: {
+      ...sessionData,
+      notebookId: restoreReadingBook,
+      markdown: "Imported words never award today credit",
+    },
+    deleted_at: null,
+  }));
+  await db.query("select restore_records($1)", [
+    JSON.stringify([
+      {
+        id: restoreReadingBook,
+        kind: "notebook",
+        data: { ...readingNotebookData, reading: true },
+        deleted_at: null,
+      },
+      ...restoredSessions,
+    ]),
+  ]);
+  assert.equal(
+    (
+      await db.query(
+        "select count(*)::int n from records where kind='entry' and data->>'notebookId'=$1 and not(data ? 'mergedInto')",
+        [restoreReadingBook],
+      )
+    ).rows[0].n,
+    2,
+  );
+  assert.equal(
+    (
+      await db.query(
+        "select count(*)::int n from records where kind='activity' and data->>'notebookId'=$1",
+        [restoreReadingBook],
+      )
+    ).rows[0].n,
+    0,
+  );
+  assert.equal(
+    (
+      await db.query(
+        "select data from records where kind='work_time' and data->>'date'='2026-10-04'",
+      )
+    ).rows[0].data.actualSeconds,
+    3600,
+  );
+  pass(
+    "archive restores preserve each reading session without awarding words or changing work hours",
+  );
+  await as("anon");
+  await assert.rejects(
+    () => save(randomUUID(), "entry", sessionData),
+    /permission denied/,
+  );
+  await as("authenticated", outsider);
+  await assert.rejects(
+    () => save(randomUUID(), "entry", sessionData),
+    /Owner access/,
+  );
+  assert.equal(
+    (await db.query("select * from records where id=$1", [sessionA])).rows
+      .length,
+    0,
+  );
+  await assert.rejects(
+    () => db.query("select journal_private.validate_reading()"),
+    /permission denied/,
+  );
+  pass("reading sessions preserve anonymous and non-owner isolation");
+}
 await db.close();
 console.log(
   `\n${checks} database behavior checks passed (real PostgreSQL via PGlite).`,

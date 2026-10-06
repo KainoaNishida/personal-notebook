@@ -53,6 +53,7 @@ import type {
 } from "./domain";
 import * as api from "./service";
 import { NotebookIndex, ResearchTimeline } from "./components/NotebookViews";
+import { ReadingLog } from "./components/ReadingLog";
 import { EntryLabels } from "./components/Labels";
 import { ColorSelector, validColor } from "./components/ColorSelector";
 import { MarkdownHelp } from "./components/MarkdownHelp";
@@ -159,6 +160,7 @@ function Workspace() {
   const isWriting =
     !!notebook &&
     !notebook.data.research &&
+    (!notebook.data.reading || (!!entry && !entry.data.reading)) &&
     (/^\/entries\//.test(route.pathname) ||
       /^\/notebooks\/[^/]+$/.test(route.pathname));
   const context = search
@@ -210,6 +212,21 @@ function Workspace() {
               to={`/notebooks/${notebook.id}/pages`}
             >
               {entry ? "Back to pages" : "All pages"}
+              <ArrowUpRight size={15} />
+            </Link>
+          )}
+          {!search && notebook?.data.reading && !isWriting && (
+            <Link
+              className="topbar-pages"
+              to={
+                route.pathname.endsWith("/pages")
+                  ? "/notebooks"
+                  : `/notebooks/${notebook.id}/pages`
+              }
+            >
+              {route.pathname.endsWith("/pages")
+                ? "All notebooks"
+                : "All pages"}
               <ArrowUpRight size={15} />
             </Link>
           )}
@@ -581,6 +598,7 @@ function Notebooks({ records }: { records: Snapshot }) {
     [name, setName] = useState(""),
     [description, setDescription] = useState(""),
     [icon, setIcon] = useState("reading"),
+    [reading, setReading] = useState(false),
     [error, setError] = useState("");
   const ns = ofKind(records, "notebook").sort(
     (a, b) => a.data.order - b.data.order,
@@ -590,6 +608,7 @@ function Notebooks({ records }: { records: Snapshot }) {
     setName(n?.data.name || "");
     setDescription(n?.data.description || "");
     setIcon(n?.data.icon || "reading");
+    setReading(n?.data.reading || false);
     setOpen(true);
   }
   async function submit(e: FormEvent) {
@@ -609,6 +628,7 @@ function Notebooks({ records }: { records: Snapshot }) {
           name: name.trim(),
           description,
           icon,
+          reading,
         },
         editing?.revision || 0,
       );
@@ -642,7 +662,7 @@ function Notebooks({ records }: { records: Snapshot }) {
             key={n.id}
             style={{ "--subject": n.data.color } as CSSProperties}
           >
-            <Link to={`/notebooks/${n.id}/pages`}>
+            <Link to={`/notebooks/${n.id}${n.data.reading ? "" : "/pages"}`}>
               <div className="notebook-cover">
                 <SubjectIcon name={n.data.icon} size={35} />
                 <span className="eyebrow">
@@ -727,6 +747,18 @@ function Notebooks({ records }: { records: Snapshot }) {
               ),
             )}
           </fieldset>
+          {!editing && (
+            <label className="field">
+              Notebook layout
+              <select
+                value={reading ? "reading" : "daily"}
+                onChange={(e) => setReading(e.target.value === "reading")}
+              >
+                <option value="daily">Daily pages</option>
+                <option value="reading">Reading log</option>
+              </select>
+            </label>
+          )}
           <button className="primary" disabled={!name.trim()}>
             Save notebook
           </button>
@@ -761,6 +793,10 @@ function NotebookPage({
       !e.data.paperId,
   );
   if (legacy) return <Navigate to={`/entries/${legacy.id}`} replace />;
+  if (notebook.data.reading)
+    return (
+      <ReadingLog key={notebook.id} records={records} notebook={notebook} />
+    );
   return (
     <main className="page daily-page">
       <DailyEntry
@@ -780,6 +816,13 @@ function EntryPage({ records }: { records: Snapshot }) {
     return <Navigate to={`/entries/${record.data.mergedInto}`} replace />;
   if (record?.data.paperId)
     return <Navigate to={`/papers/${record.data.paperId}`} replace />;
+  if (record?.data.reading && !record.deleted_at)
+    return (
+      <Navigate
+        to={`/notebooks/${record.data.notebookId}?session=${record.id}`}
+        replace
+      />
+    );
   return record && !record.deleted_at ? (
     <main className="page daily-page">
       <EntryWriting

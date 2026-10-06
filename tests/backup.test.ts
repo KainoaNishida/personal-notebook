@@ -36,7 +36,7 @@ const records: Snapshot = [
 describe("portable backup validation", () => {
   it("validates known versions and required entity references", () => {
     expect(validateManifest({ version: 1, records })).toHaveLength(2);
-    expect(() => validateManifest({ version: 4, records })).toThrow();
+    expect(() => validateManifest({ version: 5, records })).toThrow();
     expect(() =>
       validateManifest({ version: 1, records: [records[1]] }),
     ).toThrow();
@@ -146,4 +146,32 @@ it("round trips v3 work days without changing their dates or totals", () => {
     Object.assign(invalid[0].data, { actualSeconds: value });
     expect(() => validateManifest({ version: 3, records: invalid })).toThrow();
   }
+});
+
+it("preserves distinct same-day reading sessions in v4 and rejects malformed ownership", () => {
+  const snapshot = structuredClone(records);
+  if (snapshot[0].kind === "notebook") snapshot[0].data.reading = true;
+  if (snapshot[1].kind === "entry")
+    snapshot[1].data.reading = {
+      minutes: 25,
+      author: "An Author",
+      createdAt: "2026-10-05T12:00:00Z",
+    };
+  snapshot.push({
+    ...structuredClone(snapshot[1]),
+    id: "00000000-0000-4000-8000-000000000006",
+  });
+  expect(validateManifest({ version: 4, records: snapshot })).toEqual(snapshot);
+  const ids = new Map(snapshot.map((r) => [r.id, crypto.randomUUID()]));
+  const copy = remapReferences(snapshot, ids);
+  expect(
+    copy.filter((r) => r.kind === "entry").map((r) => r.data.reading?.minutes),
+  ).toEqual([25, 25]);
+  expect(
+    copy.filter((r) => r.kind === "entry").map((r) => r.data.notebookId),
+  ).toEqual([ids.get(n), ids.get(n)]);
+  if (snapshot[0].kind === "notebook") snapshot[0].data.reading = false;
+  expect(() => validateManifest({ version: 4, records: snapshot })).toThrow(
+    "reading notebook",
+  );
 });

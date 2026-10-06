@@ -5,7 +5,7 @@ import { PGlite } from "@electric-sql/pglite";
 
 // Exercise the real production service path and PostgreSQL RPC with two isolated
 // browser profiles. Only HTTP transport/Auth are synthetic; no shared localStorage.
-test("hours migrate and sync across independent devices through the account API", async ({
+test("reading sessions sync across devices, survive lost responses, and preserve conflicting notes", async ({
   browser,
 }) => {
   test.setTimeout(60000);
@@ -40,7 +40,8 @@ test("hours migrate and sync across independent devices through the account API"
   await db.query("select save_record($1,'notebook',$2,0)", [
     "20000000-0000-4000-8000-000000000001",
     JSON.stringify({
-      name: "Test notebook",
+      name: "Reading",
+      reading: true,
       description: "",
       color: "#b7cba3",
       icon: "book",
@@ -74,6 +75,7 @@ test("hours migrate and sync across independent devices through the account API"
     browser.newContext(),
   ]);
   let offline = false;
+  let loseResponse = false;
   try {
     await expect
       .poll(async () => {
@@ -135,17 +137,21 @@ test("hours migrate and sync across independent devices through the account API"
                 : records,
             );
           }
-          if (url.pathname === "/rest/v1/rpc/save_work_time") {
+          if (url.pathname === "/rest/v1/rpc/save_entry") {
             const p = route.request().postDataJSON();
             const { rows } = await db.query(
-              "select save_work_time($1,$2,$3,$4) as result",
+              "select save_entry($1,$2,$3,$4) as result",
               [
-                p.p_date,
-                p.p_field,
-                JSON.stringify(p.p_value),
-                JSON.stringify(p.p_expected),
+                p.p_id,
+                JSON.stringify(p.p_data),
+                p.p_revision,
+                p.p_writing_date,
               ],
             );
+            if (loseResponse && index === 0) {
+              loseResponse = false;
+              return route.abort();
+            }
             return reply(rows[0].result);
           }
           return reply(
@@ -159,73 +165,125 @@ test("hours migrate and sync across independent devices through the account API"
     }
     const a = await contexts[0].newPage(),
       b = await contexts[1].newPage();
-    await a.goto("http://127.0.0.1:5176");
-    await a.evaluate(() => {
-      localStorage.setItem(
-        "kais-notebook:work-time:owner",
-        JSON.stringify({ version: 1, days: { "2026-10-02": 11229 } }),
-      );
-      localStorage.setItem(
-        "kais-notebook:time-calculator:owner",
-        JSON.stringify({ date: "2026-10-02", input: "10:00, 10:00" }),
-      );
-    });
-    await a.reload();
-    await expect(a.getByLabel("Hours sync status")).toHaveText("Hours synced");
-    await expect(a.getByLabel("All-time hours")).toHaveText("21:25:30");
-    await b.goto("http://127.0.0.1:5176");
-    await expect(b.getByLabel("All-time hours")).toHaveText("21:25:30");
+    const url =
+      "http://127.0.0.1:5176/notebooks/20000000-0000-4000-8000-000000000001";
+    await a.goto(url);
+    await a.getByRole("button", { name: "Log reading", exact: true }).click();
+    const form = a.getByRole("form", { name: "Log reading session" });
+    await form
+      .getByRole("combobox", { name: "Book title" })
+      .fill("A synced book");
+    await form
+      .getByRole("spinbutton", { name: "Minutes", exact: true })
+      .fill("35");
+    loseResponse = true;
+    await form.getByRole("button", { name: "Save log" }).click();
+    await expect(form.getByRole("alert")).toBeVisible();
+    await form.getByRole("button", { name: "Save log" }).click();
+    await expect(form).toHaveCount(0);
+    await expect(a.locator(".reading-row")).toHaveCount(1);
+    await b.goto(url);
+    await expect(b.locator(".reading-row")).toContainText("A synced book");
+    await expect(b.locator(".reading-footer")).toContainText(
+      "35 minutes in view",
+    );
     expect(
-      await b.evaluate(() =>
-        localStorage.getItem("kais-notebook:work-time:owner"),
-      ),
+      await b.evaluate(() => localStorage.getItem("commonplace:preview:v1")),
     ).toBeNull();
-    const actualA = a.getByRole("textbox", {
-      name: "Actual time worked (HH:MM:SS)",
-    });
-    const actualB = b.getByRole("textbox", {
-      name: "Actual time worked (HH:MM:SS)",
-    });
-    await actualA.fill("00:30:00");
-    await actualA.blur();
-    await expect(a.getByLabel("Hours sync status")).toHaveText("Hours synced");
-    await b.reload();
-    await expect(actualB).toHaveValue("00:30:00");
-    await expect(b.getByLabel("All-time hours")).toHaveText("21:55:30");
-    await actualA.fill("00:45:00");
-    await actualA.blur();
-    await expect(a.getByLabel("Hours sync status")).toHaveText("Hours synced");
-    await actualB.fill("01:00:00");
-    await actualB.blur();
+    for (const page of [a, b]) {
+      await page
+        .getByRole("button", { name: /Add notes for A synced book/ })
+        .click();
+      await page.getByRole("button", { name: "Edit Markdown source" }).click();
+    }
+    await a.locator(".cm-content").fill("Saved thoughts from device one.");
     await expect(
-      b.getByRole("button", { name: "Keep account value" }),
+      a.getByText("All changes saved", { exact: true }),
     ).toBeVisible();
-    await b.screenshot({
-      path: "test-results/hours-sync-conflict.png",
-      fullPage: true,
-    });
-    await b.getByRole("button", { name: "Keep account value" }).click();
-    await expect(actualB).toHaveValue("00:45:00");
+    await b.locator(".cm-content").fill("Other thoughts from device two.");
+    await expect(
+      b.getByRole("button", { name: "Review versions" }),
+    ).toBeVisible();
+    await b.getByRole("button", { name: "Review versions" }).click();
+    await expect(b.locator(".conflict-review")).toContainText("35 minutes");
+    await expect(b.locator(".conflict-review")).toContainText(
+      "Saved thoughts from device one.",
+    );
+    await b.getByRole("button", { name: "Keep this window" }).click();
+    await expect(
+      b.getByText("All changes saved", { exact: true }),
+    ).toBeVisible();
+    await a.reload();
+    await expect(a.locator(".cm-content")).toContainText(
+      "Other thoughts from device two.",
+    );
     offline = true;
-    await actualA.fill("01:00:00");
-    await actualA.blur();
-    await expect(
-      a.getByRole("button", { name: "Retry hours sync" }),
-    ).toBeVisible();
+    await a
+      .locator(".cm-content")
+      .fill("Recovered notes after an offline edit.");
+    await expect(a.getByRole("button", { name: "Retry save" })).toBeVisible();
     offline = false;
     await a.reload();
-    await expect(a.getByLabel("Hours sync status")).toHaveText("Hours synced");
+    await a.getByRole("button", { name: "Review versions" }).click();
+    await expect(a.locator(".conflict-review")).toContainText(
+      "Recovered notes after an offline edit.",
+    );
+    await a.getByRole("button", { name: "Keep this window" }).click();
+    await expect(
+      a.getByText("All changes saved", { exact: true }),
+    ).toBeVisible();
     await b.reload();
-    await expect(actualB).toHaveValue("01:00:00");
-    await expect(b.getByLabel("All-time hours")).toHaveText("22:25:30");
-    await expect(a.getByLabel("All-time hours")).toHaveText("22:25:30");
+    await expect(b.locator(".cm-content")).toContainText(
+      "Recovered notes after an offline edit.",
+    );
+    await b.getByRole("button", { name: "Edit log", exact: true }).click();
+    await b
+      .getByRole("form")
+      .getByRole("spinbutton", { name: "Minutes", exact: true })
+      .fill("60");
+    await a.getByRole("button", { name: "Edit log", exact: true }).click();
+    await a
+      .getByRole("form")
+      .getByRole("spinbutton", { name: "Minutes", exact: true })
+      .fill("45");
+    await a.getByRole("button", { name: "Save details" }).click();
+    await expect(a.getByRole("form")).toHaveCount(0);
+    await b.reload();
+    await expect(
+      b
+        .getByRole("form")
+        .getByRole("spinbutton", { name: "Minutes", exact: true }),
+    ).toHaveValue("60");
+    await b.getByRole("button", { name: "Save details" }).click();
+    await expect(b.getByRole("alert")).toContainText(
+      "details changed in another window",
+    );
+    await b.getByRole("form").getByRole("button", { name: "Cancel" }).click();
+    await b.getByRole("button", { name: "Edit log", exact: true }).click();
+    await expect(
+      b
+        .getByRole("form")
+        .getByRole("spinbutton", { name: "Minutes", exact: true }),
+    ).toHaveValue("45");
+    await b
+      .getByRole("form")
+      .getByRole("spinbutton", { name: "Minutes", exact: true })
+      .fill("60");
+    await b.getByRole("button", { name: "Save details" }).click();
+    await expect(b.getByRole("form")).toHaveCount(0);
+    await a.reload();
+    await expect(a.locator(".reading-minutes")).toHaveText("60");
+    expect(
+      (await db.query("select count(*)::int n from records where kind='entry'"))
+        .rows[0].n,
+    ).toBe(1);
     expect(
       (
         await db.query(
           "select count(*)::int n from records where kind='work_time'",
         )
       ).rows[0].n,
-    ).toBe(2);
+    ).toBe(0);
   } finally {
     await Promise.all(contexts.map((context) => context.close()));
     server.kill();

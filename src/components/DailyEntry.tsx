@@ -28,6 +28,7 @@ export function DailyEntry({
   const existing = ofKind(records, "entry").find(
     (e) =>
       !e.data.paperId &&
+      !e.data.reading &&
       e.data.notebookId === notebook.id &&
       e.data.date === date,
   );
@@ -36,6 +37,7 @@ export function DailyEntry({
       e.kind === "entry" &&
       e.deleted_at &&
       !e.data.paperId &&
+      !e.data.reading &&
       e.data.notebookId === notebook.id &&
       e.data.date === date,
   );

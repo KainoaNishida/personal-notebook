@@ -24,6 +24,7 @@ export interface Notebook {
   order: number;
   archived: boolean;
   research?: boolean;
+  reading?: boolean;
 }
 export interface Entry {
   title: string;
@@ -33,6 +34,7 @@ export interface Entry {
   paperId?: string;
   mergedInto?: string;
   labelIds?: string[];
+  reading?: { minutes: number; author: string; createdAt: string };
 }
 export interface Paper {
   title: string;
@@ -289,6 +291,7 @@ export const seedNotebooks: Notebook[] = [
   },
   {
     name: "Reading",
+    reading: true,
     description: "",
     color: "#c7b8d8",
     icon: "reading",

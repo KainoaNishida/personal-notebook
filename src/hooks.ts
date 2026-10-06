@@ -353,6 +353,7 @@ export function useDraft<K extends "entry" | "day">(record: RecordItem<K>) {
     keepMine,
     reviewRecovery,
     flush,
+    isSaved: () => !latest.current.dirty && !latest.current.conflict,
   };
 }
 
