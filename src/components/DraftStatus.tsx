@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Check } from "lucide-react";
 import type { AnyRecord } from "../domain";
 
 export function DraftStatus({
@@ -20,6 +21,7 @@ export function DraftStatus({
   const [open, setOpen] = useState(false);
   const [merged, setMerged] = useState<string | null>(null);
   const [failure, setFailure] = useState("");
+  const saved = draft.status === "Saved" && !draft.error && !draft.conflict;
   const remote = draft.conflict?.data as
     { markdown?: string; title?: string } | undefined;
   async function resolve(action: () => void | Promise<void>) {
@@ -34,8 +36,15 @@ export function DraftStatus({
   }
   return (
     <div className="draft-status" role="status">
-      <span className={draft.error ? "error-text" : "muted"}>
-        {draft.conflict ? "Save needs review" : draft.status}
+      <span
+        className={`draft-indicator ${draft.error ? "error-text" : "muted"}`}
+      >
+        {saved && <Check size={14} aria-hidden="true" />}
+        {draft.conflict
+          ? "Save needs review"
+          : saved
+            ? "All changes saved"
+            : draft.status}
       </span>
       {draft.conflict ? (
         <>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -301,6 +301,18 @@ export function Markdown({
             ),
           pre: ({ children, node }) => (
             <CodeBlock
+              language={node?.children
+                .flatMap((child) =>
+                  child.type === "element"
+                    ? child.properties.className || []
+                    : [],
+                )
+                .find(
+                  (name) =>
+                    typeof name === "string" && name.startsWith("language-"),
+                )
+                ?.toString()
+                .slice(9)}
               text={
                 node?.children
                   .map((n) =>
@@ -339,30 +351,38 @@ export function Markdown({
 function CodeBlock({
   children,
   text,
+  language,
 }: {
   children: React.ReactNode;
   text: string;
+  language?: string;
 }) {
   const [status, setStatus] = useState("Copy");
+  const content = useRef<HTMLDivElement>(null);
   return (
     <div className="code-block">
-      <button
-        className="copy-code"
-        onClick={async (e) => {
-          try {
-            await navigator.clipboard.writeText(
-              e.currentTarget.parentElement?.querySelector("code")
-                ?.textContent || text,
-            );
-            setStatus("Copied");
-          } catch {
-            setStatus("Copy failed");
-          }
-        }}
-      >
-        {status}
-      </button>
-      <div className="code-content">{children}</div>
+      <div className="code-header">
+        <span className="code-language">{language}</span>
+        <button
+          type="button"
+          className="copy-code"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(
+                content.current?.querySelector("code")?.textContent || text,
+              );
+              setStatus("Copied");
+            } catch {
+              setStatus("Copy failed");
+            }
+          }}
+        >
+          {status}
+        </button>
+      </div>
+      <div ref={content} className="code-content">
+        {children}
+      </div>
     </div>
   );
 }

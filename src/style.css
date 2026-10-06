@@ -304,6 +304,7 @@ p {
 }
 .cm-scroller {
   font-family: inherit !important;
+  line-height: inherit !important;
   overflow: visible !important;
 }
 .cm-content {
@@ -312,7 +313,7 @@ p {
   caret-color: var(--accent);
 }
 .cm-line {
-  padding: 2px 0 !important;
+  padding: 0 !important;
 }
 .cm-cursor {
   border-left-color: var(--accent) !important;
@@ -1143,6 +1144,7 @@ p {
 .code-content {
   overflow: auto;
   white-space: pre;
+  min-width: 0;
 }
 .code-content > code {
   padding: 0;
@@ -1464,9 +1466,12 @@ body,
 .activity-table .activity-today {
   color: var(--accent);
 }
+.activity-table thead .activity-today {
+  background: var(--selected);
+  border-radius: 4px;
+}
 .activity-table .activity-today .activity-cell {
-  outline: 1px solid var(--border);
-  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 .index-toolbar {
   display: flex;
@@ -1615,23 +1620,6 @@ a.goal-card:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
-.code-block {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 12px;
-  padding: 12px 14px;
-}
-.code-content {
-  grid-column: 1;
-  grid-row: 1;
-  min-width: 0;
-}
-.copy-code {
-  position: static;
-  grid-column: 2;
-  grid-row: 1;
-}
 .cm-content ::selection,
 .cm-content::selection {
   background: color-mix(in srgb, var(--accent) 33%, transparent);
@@ -1704,12 +1692,6 @@ a.goal-card:focus-visible {
   .markdown-help-content {
     padding: 24px 20px 48px;
   }
-}
-.format-select select {
-  width: auto;
-}
-.markdown-helper {
-  margin-left: auto;
 }
 .markdown-help-dialog {
   width: min(960px, calc(100vw - 32px));

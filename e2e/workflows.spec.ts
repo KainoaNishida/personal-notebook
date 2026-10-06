@@ -41,7 +41,9 @@ test("five saved new words complete a goal and deletion cannot undo it", async (
     .fill("A small discovery");
   await page.getByRole("button", { name: "Edit Markdown source" }).click();
   await page.locator(".cm-content").fill("one two three four");
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
   await page.goto("/");
   await expect(
     page.locator(".goal-card").filter({ hasText: "Art & portraits" }),
@@ -49,9 +51,13 @@ test("five saved new words complete a goal and deletion cannot undo it", async (
   await page.goto("/notebooks/00000000-0000-4000-8000-000000000003");
   await page.getByRole("button", { name: "Edit Markdown source" }).click();
   await page.locator(".cm-content").fill("one two three four five");
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
   await page.locator(".cm-content").fill("");
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
   await page.goto("/");
   await expect(
     page.locator(".goal-card").filter({ hasText: "Art & portraits" }),
@@ -104,7 +110,9 @@ test("PDF regions survive zoom and reload; AI only opens on request", async ({
   await page.mouse.up();
   await page.getByRole("button", { name: "Link to notes" }).click();
   await expect(page.locator(".highlight")).toHaveCount(1);
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
   // Autosave reorders the query cache, then a server refresh replaces object
   // references. Neither event should navigate back to an old source link.
   await page.getByRole("spinbutton", { name: "PDF page" }).fill("2");
@@ -113,7 +121,9 @@ test("PDF regions survive zoom and reload; AI only opens on request", async ({
     .getByRole("textbox", { name: "Paper title", exact: true })
     .fill("Reading on page two");
   await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
   const other = await page.context().newPage();
   await other.goto("/");
   await page.bringToFront();
@@ -180,12 +190,16 @@ test("image captions, search and removal of deletion controls", async ({
     page.getByRole("img", { name: "Reference image" }),
   ).toBeVisible();
   await expect(page.locator(".cm-content")).not.toContainText("sketch.png");
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
   await page
     .getByRole("textbox", { name: "Image caption" })
     .fill("A hand-drawn [study] $&");
   await page.getByRole("textbox", { name: "Image caption" }).press("Enter");
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
   await page.reload();
   await expect(page.locator(".asset-image img")).toBeVisible();
   await expect(
@@ -240,7 +254,9 @@ test("concurrent edits show recoverable conflict instead of overwriting", async 
     "",
   );
   await page.getByRole("textbox", { name: "Entry title" }).fill("First window");
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
   await other
     .getByRole("textbox", { name: "Entry title" })
     .fill("Second window");
@@ -259,7 +275,9 @@ test("concurrent edits show recoverable conflict instead of overwriting", async 
     .click();
   await expect(other.locator(".conflict-review")).toContainText("First window");
   await other.getByRole("button", { name: "Keep this window" }).click();
-  await expect(other.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(
+    other.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
   await page.reload();
   await expect(page.getByRole("textbox", { name: "Entry title" })).toHaveValue(
     "Second window",
@@ -350,7 +368,9 @@ test("long research notes preserve preview nodes, cursor, scroll and undo across
   const editor = page.locator(".cm-content");
   await editor.fill(text);
   await page.getByRole("button", { name: "Use live preview" }).click();
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
   await editor.press("ControlOrMeta+End");
   await editor.press("End");
   const first = await page.locator(".live-block").first().elementHandle();
@@ -360,7 +380,9 @@ test("long research notes preserve preview nodes, cursor, scroll and undo across
   await page.keyboard.type(" continuing through the autosave boundary", {
     delay: 65,
   });
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
   expect(await first!.evaluate((el) => el.isConnected)).toBe(true);
   expect(
     await page.locator(".science-notes").evaluate((el) => el.scrollTop),
@@ -372,7 +394,9 @@ test("long research notes preserve preview nodes, cursor, scroll and undo across
   await expect(editor).toContainText(
     "Bottom continuing through the autosave boundary",
   );
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: "Edit Markdown source" }).click();
   await editor.press("ControlOrMeta+End");
@@ -420,7 +444,9 @@ test("label creation, filtering, editing and shared color controls", async ({
   await expect(
     page.getByRole("button", { name: "Theory", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
   await expect(page.locator(".cm-content")).toContainText("Five new words");
   await page.getByRole("link", { name: "All pages", exact: true }).click();
   await page.getByRole("button", { name: "Labels", exact: true }).click();
@@ -724,7 +750,9 @@ test("daily writing rolls over at midnight without moving the prior day's text",
     .fill("Before midnight");
   await page.getByRole("button", { name: "Edit Markdown source" }).click();
   await page.locator(".cm-content").fill("This belongs to the previous day.");
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
   await page.clock.fastForward(31000);
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(page.locator(".entry-date")).toContainText("September 29, 2026");
@@ -763,7 +791,9 @@ test("research caret stays at the insertion point through source links and pane 
   await editor.press("ControlOrMeta+End");
   await page.getByRole("button", { name: "Use live preview" }).click();
   await editor.press("ControlOrMeta+End");
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
   // Link actual PDF text while the editor has an existing insertion position.
   const span = page
     .locator(".textLayer span")
@@ -777,7 +807,9 @@ test("research caret stays at the insertion point through source links and pane 
   });
   await page.locator(".pdf-page").dispatchEvent("mouseup");
   await page.getByRole("button", { name: "Link to notes" }).click();
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
   await editor.press("ControlOrMeta+End");
   await page.keyboard.type("After source link");
   const caretGeometry = async () =>
@@ -822,7 +854,9 @@ test("research caret stays at the insertion point through source links and pane 
   await assertNativeCaret();
   await page.getByRole("button", { name: "Edit Markdown source" }).click();
   await expect(editor).toContainText("After source link after resize");
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
   await page.reload();
   await editor.press("ControlOrMeta+End");
   await page.keyboard.type(" after reload");
@@ -833,7 +867,9 @@ test("research caret stays at the insertion point through source links and pane 
   await expect(editor).toContainText("after reloXX");
   await editor.press("ControlOrMeta+z");
   await expect(editor).toContainText("after reload");
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
   // A click on rendered prose activates its source without losing insertion.
   const paragraph = page
     .locator(".live-block p")
@@ -842,7 +878,9 @@ test("research caret stays at the insertion point through source links and pane 
   await editor.press("End");
   await page.keyboard.type(" clicked-here");
   await expect(editor).toContainText("clicked-here");
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
   const paperUrl = page.url();
   await page.clock.fastForward(86400000);
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
@@ -934,7 +972,7 @@ test("whole goal cards navigate and the Markdown guide is accessible", async ({
   });
 });
 
-test("single-line code has no empty toolbar row and preserves code when copied", async ({
+test("single-line code has a labeled header and preserves code when copied", async ({
   page,
   context,
 }) => {
@@ -956,9 +994,10 @@ test("single-line code has no empty toolbar row and preserves code when copied",
       buttonTop: button.top - box.top,
     };
   });
-  expect(geometry.height).toBeLessThan(60);
-  expect(geometry.contentTop).toBeLessThanOrEqual(14);
-  expect(geometry.contentTop).toBe(geometry.buttonTop);
+  await expect(block.locator(".code-language")).toHaveText("python");
+  expect(geometry.height).toBeLessThan(100);
+  expect(geometry.buttonTop).toBe(16);
+  expect(geometry.contentTop).toBeGreaterThan(geometry.buttonTop + 20);
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await block.getByRole("button", { name: "Copy", exact: true }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
@@ -1033,9 +1072,10 @@ test("Calm desk formatting preserves selection, undo, drafts and helper scrollin
   await expect(editor).toHaveText("*A useful thought*");
   await editor.press("ControlOrMeta+z");
   await editor.press("ControlOrMeta+a");
+  await page.getByRole("button", { name: "Math", exact: true }).click();
   await page
-    .getByRole("combobox", { name: "Math", exact: true })
-    .selectOption("math");
+    .getByRole("menuitem", { name: "Display equation", exact: true })
+    .click();
   await expect(editor).toContainText("$$");
   await editor.press("ControlOrMeta+z");
   await editor.press("ControlOrMeta+End");
@@ -1065,7 +1105,9 @@ test("Calm desk formatting preserves selection, undo, drafts and helper scrollin
   await page.getByRole("button", { name: "Italic", exact: true }).click();
   await page.keyboard.type("continued");
   await expect(editor).toContainText("A useful thought*continued*");
-  await expect(page.getByText("Saved", { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByText("All changes saved", { exact: true }).first(),
+  ).toBeVisible();
   await page.reload();
   await page
     .getByRole("button", { name: "Edit Markdown source", exact: true })

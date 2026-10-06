@@ -31,10 +31,11 @@ import { markdown } from "@codemirror/lang-markdown";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { syntaxHighlighting, HighlightStyle } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
-import { Code2, Eye, ImagePlus } from "lucide-react";
+import { Code2, Eye, Image as ImageIcon, Link as LinkIcon } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
+import { FormatMenu } from "./FormatMenu";
 import { MarkdownHelpContent } from "./MarkdownHelp";
-import { applyFormat, type Format } from "./formatting";
+import { applyFormat } from "./formatting";
 import { Markdown } from "./Markdown";
 import type { Snapshot } from "../domain";
 type Context = {
@@ -403,6 +404,7 @@ export const Editor = forwardRef<
         <button
           type="button"
           aria-label="Bold"
+          className="format-icon"
           title="Bold (Ctrl/Cmd+B)"
           onClick={() => view.current && applyFormat(view.current, "bold")}
         >
@@ -411,120 +413,97 @@ export const Editor = forwardRef<
         <button
           type="button"
           aria-label="Italic"
+          className="format-icon"
           title="Italic (Ctrl/Cmd+I)"
           onClick={() => view.current && applyFormat(view.current, "italic")}
         >
           <em>I</em>
         </button>
-        {(
-          [
-            [
-              "Heading",
-              [
-                ["h1", "Heading 1"],
-                ["h2", "Heading 2"],
-                ["h3", "Heading 3"],
-              ],
-            ],
-            [
-              "Code",
-              [
-                ["inlineCode", "Inline code"],
-                ["code", "Code block"],
-              ],
-            ],
-            [
-              "Math",
-              [
-                ["inlineMath", "Inline math"],
-                ["math", "Display equation"],
-              ],
-            ],
-            [
-              "More",
-              [
-                ["bullet", "Bullet list"],
-                ["number", "Numbered list"],
-                ["task", "Task list"],
-                ["quote", "Block quote"],
-              ],
-            ],
-          ] as [string, [Format, string][]][]
-        ).map(([name, options]) => (
-          <label className="format-select" key={name}>
-            <span className="sr-only">{name}</span>
-            <select
-              aria-label={name}
-              value=""
-              onChange={(e) => {
-                if (view.current)
-                  applyFormat(view.current, e.target.value as Format);
-              }}
-            >
-              <option value="" disabled>
-                {name}
-              </option>
-              {options.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
+        {(["Heading", "Code", "Math"] as const).map((name) => (
+          <FormatMenu
+            key={name}
+            name={name}
+            onFormat={(format) => {
+              if (view.current) applyFormat(view.current, format);
+            }}
+          />
         ))}
         <button
           type="button"
+          className="format-icon"
+          aria-label="Insert link"
+          title="Insert link"
           onClick={() => view.current && applyFormat(view.current, "link")}
         >
-          Link
+          <LinkIcon size={17} aria-hidden="true" />
         </button>
-        <div className="row">
-          {onUpload && (
-            <button
-              className="icon-button"
-              aria-label="Insert image"
-              disabled={uploading}
-              onClick={() => input.current?.click()}
-            >
-              <ImagePlus size={16} />
-            </button>
-          )}
+        {onUpload && (
           <button
-            className="icon-button"
+            type="button"
+            className="format-icon"
+            aria-label="Insert image"
+            title="Insert image"
+            disabled={uploading}
+            onClick={() => input.current?.click()}
+          >
+            <ImageIcon size={17} aria-hidden="true" />
+          </button>
+        )}
+        <FormatMenu
+          name="More"
+          onFormat={(format) => {
+            if (view.current) applyFormat(view.current, format);
+          }}
+        />
+        <div className="editor-helpers">
+          <Dialog.Root>
+            <Dialog.Trigger asChild>
+              <button
+                type="button"
+                className="markdown-helper"
+                aria-label="Markdown guide"
+              >
+                <span aria-hidden="true">?</span> Guide
+              </button>
+            </Dialog.Trigger>
+            <Dialog.Portal>
+              <Dialog.Overlay className="modal-overlay" />
+              <Dialog.Content
+                className="modal markdown-help-dialog"
+                aria-describedby={undefined}
+              >
+                <div className="guide-dialog-header">
+                  <Dialog.Title>Formatting reference</Dialog.Title>
+                  <Dialog.Close aria-label="Close Markdown guide">
+                    Close
+                  </Dialog.Close>
+                </div>
+                <div
+                  className="guide-dialog-scroll"
+                  tabIndex={0}
+                  aria-label="Markdown guide content"
+                >
+                  <MarkdownHelpContent />
+                </div>
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
+          <button
+            type="button"
+            className="source-toggle"
             aria-label={source ? "Use live preview" : "Edit Markdown source"}
+            aria-pressed={source}
+            title={source ? "Use live preview" : "Edit Markdown source"}
             onClick={() => setSource(!source)}
           >
-            {source ? <Eye size={16} /> : <Code2 size={16} />}
+            {source ? (
+              <Eye size={16} aria-hidden="true" />
+            ) : (
+              <Code2 size={16} aria-hidden="true" />
+            )}
+            {source ? "Preview" : "Source"}
           </button>
         </div>
-        <Dialog.Root>
-          <Dialog.Trigger asChild>
-            <button type="button" className="markdown-helper">
-              Markdown guide
-            </button>
-          </Dialog.Trigger>
-          <Dialog.Portal>
-            <Dialog.Overlay className="modal-overlay" />
-            <Dialog.Content
-              className="modal markdown-help-dialog"
-              aria-describedby={undefined}
-            >
-              <div className="guide-dialog-header">
-                <Dialog.Title>Formatting reference</Dialog.Title>
-                <Dialog.Close aria-label="Close Markdown guide">
-                  Close
-                </Dialog.Close>
-              </div>
-              <div
-                className="guide-dialog-scroll"
-                tabIndex={0}
-                aria-label="Markdown guide content"
-              >
-                <MarkdownHelpContent />
-              </div>
-            </Dialog.Content>
-          </Dialog.Portal>
-        </Dialog.Root>
       </div>
       <input
         ref={input}

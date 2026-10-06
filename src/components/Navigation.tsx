@@ -143,6 +143,7 @@ function NavigationContent({
         </NavLink>
         <NavLink
           to="/notebooks"
+          end
           onClick={navigate}
           aria-label="Notebooks"
           title="Notebooks"

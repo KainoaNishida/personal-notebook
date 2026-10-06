@@ -86,7 +86,9 @@ test("Graphite writing, hours and full-width scrolling hold at 640, 1024 and 144
       "A useful notebook leaves room for a thought to unfold. **Clarity** comes from returning to the question, and *noticing* what changed.\n\n## The shape of an idea\n\nStart with a small example. Let the details follow when they are useful.\n\n$$\nE = mc^2\n$$\n\n```python\nfor idea in notebook:\n    explore(idea)\n```\n\nContinue here",
     );
   await page.getByRole("button", { name: "Use live preview" }).click();
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
   for (const width of [640, 1024, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
