@@ -1,7 +1,7 @@
 import { Fragment, lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ChevronDown, ChevronUp, Plus, Search } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { displayDate, ofKind } from "../domain";
 import type { RecordItem, Snapshot } from "../domain";
 import { sameData, useDraft, useNotebookDate, useSave } from "../hooks";
@@ -34,19 +34,11 @@ export function ReadingLog({
     () => !!recoveredReadingForm(notebook.id),
   );
   const [formKey, setFormKey] = useState(0);
-  const open = params.get("session"),
-    query = params.get("q") || "";
+  const open = params.get("session");
   const all = ofKind(records, "entry").filter(
     (e) => e.data.notebookId === notebook.id && !e.data.paperId,
   );
   const sessions = sortReadingSessions(all.filter((e) => !!e.data.reading));
-  const shown = sessions.filter(
-    (e) =>
-      e.id === open ||
-      `${e.data.title} ${e.data.reading?.author} ${e.data.markdown}`
-        .toLocaleLowerCase()
-        .includes(query.toLocaleLowerCase()),
-  );
   const legacy = all.filter((e) => !e.data.reading);
   function select(id: string | null) {
     setParams(
@@ -58,6 +50,13 @@ export function ReadingLog({
       { replace: true },
     );
   }
+  useEffect(() => {
+    if (params.has("q")) {
+      const next = new URLSearchParams(params);
+      next.delete("q");
+      setParams(next, { replace: true });
+    }
+  }, [params, setParams]);
   useEffect(() => {
     if (open)
       document
@@ -82,31 +81,6 @@ export function ReadingLog({
           <Plus size={16} />
           Log reading
         </button>
-      </div>
-      <div className="reading-toolbar">
-        <label className="reading-search">
-          <Search size={16} aria-hidden="true" />
-          <span className="sr-only">Search books or notes</span>
-          <input
-            placeholder="Search books or notes…"
-            value={query}
-            onChange={(e) => {
-              const q = e.target.value;
-              setParams(
-                (p) => {
-                  const next = new URLSearchParams(p);
-                  q ? next.set("q", q) : next.delete("q");
-                  return next;
-                },
-                { replace: true },
-              );
-            }}
-          />
-        </label>
-        <span className="small muted">
-          <ArrowDown size={14} aria-hidden="true" />
-          Newest day first
-        </span>
       </div>
       <div
         className="reading-table-scroll"
@@ -182,7 +156,7 @@ export function ReadingLog({
                 </td>
               </tr>
             )}
-            {shown.map((record) => (
+            {sessions.map((record) => (
               <Fragment key={record.id}>
                 <tr
                   id={`reading-${record.id}`}
@@ -258,16 +232,12 @@ export function ReadingLog({
                 )}
               </Fragment>
             ))}
-            {!shown.length && (
+            {!sessions.length && (
               <tr>
                 <td colSpan={4} className="reading-empty">
-                  <h2>
-                    {query ? "No matching sessions" : "Start your reading log"}
-                  </h2>
+                  <h2>Start your reading log</h2>
                   <p className="muted">
-                    {query
-                      ? "Try another book title, author, or note."
-                      : "Log a book and a few minutes. Add notes whenever you like."}
+                    Log a book and a few minutes. Add notes whenever you like.
                   </p>
                 </td>
               </tr>
@@ -277,15 +247,16 @@ export function ReadingLog({
       </div>
       <div className="reading-footer small muted">
         <span>
-          {shown.length} {shown.length === 1 ? "session" : "sessions"} ·{" "}
+          {sessions.length} {sessions.length === 1 ? "session" : "sessions"} ·{" "}
           {
-            new Set(shown.map((e) => e.data.title.trim().toLocaleLowerCase()))
-              .size
+            new Set(
+              sessions.map((e) => e.data.title.trim().toLocaleLowerCase()),
+            ).size
           }{" "}
           books
         </span>
         <span>
-          {shown
+          {sessions
             .reduce((sum, e) => sum + e.data.reading!.minutes, 0)
             .toLocaleString()}{" "}
           minutes in view

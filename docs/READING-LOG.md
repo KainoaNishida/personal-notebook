@@ -2,7 +2,7 @@
 
 The Reading Quick Link and notebook card open the approved four-column log: **Book title, Minutes, Date, Notes**. Sessions sort by date descending, then creation time descending, so editing notes does not reorder a day's sessions. The same book can have several sessions on one day.
 
-Use **Log reading** to enter a title, optional author, whole minutes (1–1440), a date no later than today, and an optional note. Recent titles appear as suggestions. Expand a row for the existing Markdown editor, formatting toolbar, labels, guide, and previous note versions. **Edit log** corrects book details, minutes, or the session date. Search matches titles, authors, and notes; the footer totals the visible sessions. An open note remains visible while searching so editing is not interrupted.
+Use **Log reading** to enter a title, optional author, whole minutes (1–1440), a date no later than today, and an optional note. Recent titles appear as suggestions. Expand a row for the existing Markdown editor, formatting toolbar, labels, guide, and previous note versions. **Edit log** corrects book details, minutes, or the session date. The log always shows all sessions, newest dates first, without a search field or sorting label. The footer totals all sessions. Old search parameters are removed from shared log URLs while retaining links to expanded notes.
 
 Older daily Reading pages remain under **Earlier notes**, with unchanged IDs, dates, contents, labels, and revisions. **All pages** retains the existing index, label filters, and label management. Historical entry links open their intended original page or expand the corresponding reading session. New notebooks can choose Reading log at creation; renaming a notebook does not change its layout.
 
@@ -23,7 +23,7 @@ Apply `supabase/migrations/20261006042600_reading_log.sql` before deploying the 
 Verified using Node 24:
 
 - 100 unit tests; 42 PostgreSQL behavior checks via PGlite.
-- Browser workflows for multiple sessions per day, newest-day ordering, backdating, inline minutes/author edits, expandable Markdown notes, deep links, URL search, legacy pages, recovery, midnight rollover, and notebook isolation.
+- Browser workflows for multiple sessions per day, newest-day ordering, backdating, inline minutes/author edits, expandable Markdown notes, deep links, obsolete search URLs, legacy pages, recovery, midnight rollover, and notebook isolation.
 - Two isolated browser profiles using the production service path and real PostgreSQL RPCs verify cross-device persistence, lost-response retries, stale-write conflicts, recovery after failed saves, and conflicting metadata changes. Authentication and HTTP transport are synthetic; these tests create no hosted user data.
 - Full existing browser regression suite, production authentication-gate checks, production build, and Edge Function type check. The optional private attention-PDF fixture remains skipped when unavailable.
 - Rendered screenshots reviewed at 640, 1024, and 1440 pixels, including table columns, quick-add, and expanded notes. Narrow tables scroll internally without widening the app shell.

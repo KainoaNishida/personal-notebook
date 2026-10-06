@@ -31,6 +31,12 @@ test("reading table logs multiple sessions, sorts days, and keeps optional notes
   await expect(
     page.getByRole("heading", { name: "Reading log", exact: true }),
   ).toBeVisible();
+  await expect(page.getByText("Newest day first", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole("textbox", { name: "Search books or notes" }),
+  ).toHaveCount(0);
   await expect(page.locator(".reading-row")).toHaveCount(0);
   await log(
     page,
@@ -111,19 +117,22 @@ test("reading table logs multiple sessions, sorts days, and keeps optional notes
   await expect(page.locator(".reading-footer")).toContainText(
     "75 minutes in view",
   );
-  await page
-    .getByRole("textbox", { name: "Search books or notes" })
-    .fill("Rick Rubin");
-  await expect(page.locator(".reading-row")).toHaveCount(1);
-  await page.reload();
-  await expect(
-    page.getByRole("textbox", { name: "Search books or notes" }),
-  ).toHaveValue("Rick Rubin");
-  await expect(page.locator(".reading-row")).toContainText("Rick Rubin");
-  await expect(page.locator(".reading-footer")).toContainText(
-    "20 minutes in view",
+  const id = await page.locator(".reading-row").first().getAttribute("id");
+  const sessionId = id!.replace("reading-", "");
+  // Previously shared search URLs must show all sessions and retain the open note.
+  await page.goto(`${url}?q=does-not-match&session=${sessionId}`);
+  await expect(page.locator(".reading-row")).toHaveCount(3);
+  await expect(page).toHaveURL(
+    (location) =>
+      !location.searchParams.has("q") &&
+      location.searchParams.get("session") === sessionId,
   );
-  const id = await page.locator(".reading-row").getAttribute("id");
+  await expect(
+    page.getByRole("region", { name: "Notes for The Creative Act" }),
+  ).toBeVisible();
+  await expect(page.locator(".reading-footer")).toContainText(
+    "75 minutes in view",
+  );
   await page.goto(`/entries/${id!.replace("reading-", "")}`);
   await expect(
     page.getByRole("region", { name: "Notes for The Creative Act" }),
