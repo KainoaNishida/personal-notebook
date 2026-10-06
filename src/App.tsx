@@ -1,4 +1,5 @@
 import { TimeCalculator } from "./components/TimeCalculator";
+import { hasUnsyncedWorkTime } from "./workTimeSync";
 import { APP_NAME } from "./branding";
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import type { CSSProperties, FormEvent } from "react";
@@ -1242,10 +1243,13 @@ function SettingsPage({
     setError("");
     try {
       if (
-        Object.keys(localStorage).some((k) => k.startsWith(api.recoveryPrefix))
+        Object.keys(localStorage).some((k) =>
+          k.startsWith(api.recoveryPrefix),
+        ) ||
+        hasUnsyncedWorkTime(localStorage, api.demo ? "preview" : "owner")
       )
         throw new Error(
-          "Some edits still need saving or conflict review. Resolve them before exporting so the archive includes your latest writing.",
+          "Some edits or hours still need saving or conflict review. Open Today to finish hours sync, then resolve remaining drafts before exporting.",
         );
       await (await import("./backup")).exportArchive(await api.list());
       setMessage("Export downloaded. Keep it somewhere private.");

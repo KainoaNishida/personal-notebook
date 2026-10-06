@@ -2588,3 +2588,15 @@ a.goal-card:focus-visible {
 .time-calculator-baseline {
   max-width: 240px;
 }
+
+.time-sync-conflict {
+  margin-bottom: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+.time-sync-conflict button {
+  margin-block: 4px;
+}

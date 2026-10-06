@@ -3,7 +3,7 @@ export const STARTING_WORK_SECONDS = 18 * 3600 + 18 * 60 + 21;
 const HOURLY_RATE = 80;
 export type WorkLog = Record<string, number>;
 
-function validSeconds(seconds: unknown): seconds is number {
+export function validSeconds(seconds: unknown): seconds is number {
   return (
     typeof seconds === "number" &&
     Number.isSafeInteger(seconds) &&

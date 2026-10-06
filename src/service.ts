@@ -1,4 +1,5 @@
 import { bodyWords, addedWords, normalizeLabel } from "./progress";
+import { totalWorkedSeconds, validSeconds } from "./workTime";
 import { createClient } from "@supabase/supabase-js";
 import type { Session } from "@supabase/supabase-js";
 import {
@@ -330,6 +331,79 @@ export async function initializeNotebooks() {
     await supabase.rpc("initialize_notebooks", { p_notebooks: seedNotebooks }),
   );
 }
+export async function listWorkTime(): Promise<RecordItem<"work_time">[]> {
+  if (demo)
+    return preview().filter(
+      (r): r is RecordItem<"work_time"> => r.kind === "work_time",
+    );
+  if (!supabase) throw new Error("Backend is not configured.");
+  const records: RecordItem<"work_time">[] = [];
+  for (let from = 0; ; from += 1000) {
+    const page = check(
+      await supabase
+        .from("records")
+        .select("id,kind,data,revision,updated_at,deleted_at")
+        .eq("kind", "work_time")
+        .order("id")
+        .range(from, from + 999),
+    ) as RecordItem<"work_time">[];
+    records.push(...page);
+    if (page.length < 1000) return records;
+  }
+}
+export async function saveWorkTime(
+  date: string,
+  field: "actualSeconds" | "taskInput",
+  value: number | string,
+  expected: number | string | null,
+): Promise<{ conflict: boolean; record: RecordItem<"work_time"> }> {
+  if (!demo) {
+    if (!supabase) throw new Error("Backend is not configured.");
+    return check(
+      await supabase.rpc("save_work_time", {
+        p_date: date,
+        p_field: field,
+        p_value: value,
+        p_expected: expected,
+      }),
+    );
+  }
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+    (field === "actualSeconds"
+      ? !validSeconds(value)
+      : typeof value !== "string" || value.length > 10000)
+  )
+    throw new Error("Invalid work time.");
+  const all = preview();
+  const prior = all.find(
+    (r): r is RecordItem<"work_time"> =>
+      r.kind === "work_time" && r.data.date === date,
+  );
+  const current = prior?.data[field] ?? null;
+  if (prior && current === value) return { conflict: false, record: prior };
+  if (prior && current !== expected) return { conflict: true, record: prior };
+  if (!prior && expected !== null)
+    throw new Error("Work day no longer exists.");
+  const record: RecordItem<"work_time"> = {
+    id: prior?.id || uid(),
+    kind: "work_time",
+    revision: (prior?.revision || 0) + 1,
+    deleted_at: null,
+    updated_at: new Date().toISOString(),
+    data: { ...prior?.data, date, [field]: value },
+  };
+  const next = all.filter((r) => r.id !== record.id).concat(record);
+  totalWorkedSeconds(
+    Object.fromEntries(
+      next
+        .filter((r): r is RecordItem<"work_time"> => r.kind === "work_time")
+        .map((r) => [r.data.date, r.data.actualSeconds || 0]),
+    ),
+  );
+  localStorage.setItem(previewKey, JSON.stringify(next));
+  return { conflict: false, record };
+}
 export async function upload(file: File): Promise<RecordItem<"asset">> {
   validateUpload(file, file.type === "application/pdf");
   if (file.type.startsWith("image/")) {
@@ -450,6 +524,26 @@ export async function restoreBatch(records: Snapshot) {
   if (demo) {
     const all = preview();
     for (const record of structuredClone(records)) {
+      if (record.kind === "work_time") {
+        const prior = all.find(
+          (r): r is RecordItem<"work_time"> =>
+            r.kind === "work_time" && r.data.date === record.data.date,
+        );
+        if (prior) {
+          for (const field of ["actualSeconds", "taskInput"] as const)
+            if (
+              prior.data[field] !== undefined &&
+              record.data[field] !== undefined &&
+              prior.data[field] !== record.data[field]
+            )
+              throw new Error(
+                `Archive contains different work time for ${record.data.date}. Existing hours were not changed.`,
+              );
+          prior.data = { ...prior.data, ...record.data };
+          prior.revision++;
+          continue;
+        }
+      }
       if (
         record.kind === "entry" &&
         !record.deleted_at &&

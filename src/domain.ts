@@ -13,6 +13,7 @@ export const kinds = [
   "label",
   "writing_progress",
   "study",
+  "work_time",
 ] as const;
 export type Kind = (typeof kinds)[number];
 export interface Notebook {
@@ -67,6 +68,7 @@ export interface Settings {
   lifeNotebookId?: string;
 }
 export type DataMap = {
+  work_time: { date: string; actualSeconds?: number; taskInput?: string };
   notebook: Notebook;
   entry: Entry;
   day: { date: string; markdown: string };

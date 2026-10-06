@@ -1122,7 +1122,7 @@ test("daily time calculator multiplies durations and restores only today's list"
   ).toBe(true);
 });
 
-test("actual work time accumulates browser earnings across edits, reloads, and midnight", async ({
+test("actual work time syncs daily earnings across edits, reloads, and midnight", async ({
   page,
 }) => {
   await page.clock.install({ time: new Date("2026-10-02T19:00:00Z") });

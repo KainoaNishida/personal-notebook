@@ -36,7 +36,7 @@ const records: Snapshot = [
 describe("portable backup validation", () => {
   it("validates known versions and required entity references", () => {
     expect(validateManifest({ version: 1, records })).toHaveLength(2);
-    expect(() => validateManifest({ version: 3, records })).toThrow();
+    expect(() => validateManifest({ version: 4, records })).toThrow();
     expect(() =>
       validateManifest({ version: 1, records: [records[1]] }),
     ).toThrow();
@@ -120,4 +120,30 @@ it("round trips v2 labels, daily minutes and progress references", () => {
   expect(() => validateManifest({ version: 2, records: broken })).toThrow(
     "label",
   );
+});
+
+it("round trips v3 work days without changing their dates or totals", () => {
+  const snapshot: Snapshot = [
+    {
+      id: n,
+      kind: "work_time",
+      data: {
+        date: "2026-10-02",
+        actualSeconds: 11229,
+        taskInput: "10:00, 10:00",
+      },
+      revision: 2,
+      updated_at: "",
+      deleted_at: null,
+    },
+  ];
+  expect(validateManifest({ version: 3, records: snapshot })).toEqual(snapshot);
+  const copy = remapReferences(snapshot, new Map([[n, e]]));
+  expect(copy[0].data).toEqual(snapshot[0].data);
+  expect(copy[0].id).toBe(e);
+  for (const value of [-1, 0.5, "3600", Number.MAX_SAFE_INTEGER]) {
+    const invalid = structuredClone(snapshot);
+    Object.assign(invalid[0].data, { actualSeconds: value });
+    expect(() => validateManifest({ version: 3, records: invalid })).toThrow();
+  }
 });

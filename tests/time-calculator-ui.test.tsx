@@ -1,122 +1,116 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { TimeCalculator } from "../src/components/TimeCalculator";
-
-vi.mock("../src/service", () => ({ demo: false }));
-const workKey = "kais-notebook:work-time:owner";
+import { account } from "./work-time-helpers";
+import type { WorkTransport } from "../src/workTimeSync";
+let server: WorkTransport;
+vi.mock("../src/service", () => ({
+  demo: false,
+  listWorkTime: () => server.list(),
+  saveWorkTime: (...args: Parameters<WorkTransport["save"]>) =>
+    server.save(...args),
+}));
 const actual = () =>
   screen.getByRole("textbox", { name: "Actual time worked (HH:MM:SS)" });
 const tasks = () =>
   screen.getByRole("textbox", { name: "Times (MM:SS, separated by commas)" });
-const enter = (value: string) =>
+const enter = (value: string) => {
   fireEvent.change(actual(), { target: { value } });
-const earnings = (today: string, allTime: string) => {
-  expect(screen.getByLabelText("Today's earnings")).toHaveTextContent(today);
-  expect(screen.getByLabelText("All-time earnings")).toHaveTextContent(allTime);
+  fireEvent.blur(actual());
 };
-beforeEach(() => localStorage.clear());
+const synced = () =>
+  waitFor(() =>
+    expect(screen.getByLabelText("Hours sync status")).toHaveTextContent(
+      "Hours synced",
+    ),
+  );
+beforeEach(() => {
+  localStorage.clear();
+  server = account();
+});
 afterEach(() => vi.restoreAllMocks());
 
-it("keeps the maximum separate from actual time and restores both after reload", () => {
-  const view = render(<TimeCalculator date="2026-10-02" />);
-  earnings("$0.00", "$1,464.47");
+it("syncs both inputs and retains earnings across reload and midnight", async () => {
+  const view = render(<TimeCalculator key="2026-10-02" date="2026-10-02" />);
+  await synced();
   fireEvent.change(tasks(), { target: { value: "10:00, 10:00" } });
   expect(
     screen.getByLabelText("Time total multiplied by seven"),
   ).toHaveTextContent("02:20:00");
-  earnings("$0.00", "$1,464.47");
   enter("01:30:00");
-  earnings("$120.00", "$1,584.47");
-  expect(screen.getByLabelText("All-time hours")).toHaveTextContent("19:48:21");
+  await synced();
+  expect(screen.getByLabelText("Today's earnings")).toHaveTextContent(
+    "$120.00",
+  );
   view.unmount();
-  render(<TimeCalculator date="2026-10-02" />);
+  const reload = render(<TimeCalculator key="2026-10-02" date="2026-10-02" />);
+  await synced();
   expect(actual()).toHaveValue("01:30:00");
   expect(tasks()).toHaveValue("10:00, 10:00");
-  earnings("$120.00", "$1,584.47");
-});
-
-it("replaces daily amounts and retains earlier days across midnight and skipped days", () => {
-  const view = render(<TimeCalculator key="2026-10-02" date="2026-10-02" />);
-  enter("01:30:00");
   enter("02:00:00");
-  earnings("$160.00", "$1,624.47");
-  view.rerender(<TimeCalculator key="2026-10-03" date="2026-10-03" />);
+  await synced();
+  reload.rerender(<TimeCalculator key="2026-10-03" date="2026-10-03" />);
+  await synced();
   expect(actual()).toHaveValue("");
-  earnings("$0.00", "$1,624.47");
+  expect(tasks()).toHaveValue("");
   enter("00:30:00");
-  earnings("$40.00", "$1,664.47");
-  enter("");
-  earnings("$0.00", "$1,624.47");
-  enter("00:30:00");
-  view.rerender(<TimeCalculator key="2026-10-06" date="2026-10-06" />);
-  earnings("$0.00", "$1,664.47");
+  await synced();
   expect(screen.getByLabelText("All-time hours")).toHaveTextContent("20:48:21");
+  enter("");
+  await synced();
+  expect(screen.getByLabelText("All-time hours")).toHaveTextContent("20:18:21");
 });
 
-it("keeps the last valid actual time when an incomplete edit is reloaded", () => {
+it("preserves the last valid saved time through invalid edits and receives another device's changes on focus", async () => {
   const view = render(<TimeCalculator date="2026-10-02" />);
+  await synced();
   enter("01:00:00");
-  const saved = localStorage.getItem(workKey);
+  await synced();
   enter("01:00:99");
   expect(actual()).toHaveAttribute("aria-invalid", "true");
-  earnings("—", "—");
-  expect(localStorage.getItem(workKey)).toBe(saved);
   view.unmount();
   render(<TimeCalculator date="2026-10-02" />);
+  await synced();
   expect(actual()).toHaveValue("01:00:00");
-  earnings("$80.00", "$1,544.47");
-  fireEvent.change(tasks(), { target: { value: "bad task input" } });
-  earnings("$80.00", "$1,544.47");
+  await server.save("2026-10-02", "actualSeconds", 7200, 3600);
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  await waitFor(() => expect(actual()).toHaveValue("02:00:00"));
 });
 
-it("merges saved days from another tab before writing and refreshes other-tab changes", () => {
+it("shows and resolves a legacy/account conflict without silently overwriting hours", async () => {
+  await server.save("2026-10-02", "actualSeconds", 3600, null);
+  localStorage.setItem(
+    "kais-notebook:work-time:owner",
+    JSON.stringify({ version: 1, days: { "2026-10-02": 11229 } }),
+  );
   render(<TimeCalculator date="2026-10-03" />);
-  localStorage.setItem(
-    workKey,
-    JSON.stringify({ version: 1, days: { "2026-10-02": 3600 } }),
-  );
-  enter("00:30:00");
-  earnings("$40.00", "$1,584.47");
-  localStorage.setItem(
-    workKey,
-    JSON.stringify({
-      version: 1,
-      days: { "2026-10-02": 3600, "2026-10-03": 7200 },
-    }),
-  );
-  act(() =>
-    window.dispatchEvent(
-      new StorageEvent("storage", { key: workKey, storageArea: localStorage }),
-    ),
-  );
-  expect(actual()).toHaveValue("02:00:00");
-  earnings("$160.00", "$1,704.47");
-});
-
-it("does not claim an unsaved entry is included in the running total", () => {
-  render(<TimeCalculator date="2026-10-02" />);
-  const write = vi
-    .spyOn(Storage.prototype, "setItem")
-    .mockImplementation(() => {
-      throw new Error("Storage full");
-    });
-  enter("01:00:00");
-  expect(screen.getByText(/Actual time could not be saved/)).toBeVisible();
-  earnings("$80.00", "—");
-  write.mockRestore();
-  enter("02:00:00");
-  earnings("$160.00", "$1,624.47");
   expect(
-    screen.queryByText(/Actual time could not be saved/),
-  ).not.toBeInTheDocument();
+    await screen.findByRole("button", { name: "Keep account value" }),
+  ).toBeVisible();
+  expect(screen.getByText("03:07:09")).toBeVisible();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Use this device’s value" }),
+  );
+  await synced();
+  expect(screen.getByLabelText("All-time hours")).toHaveTextContent("21:25:30");
 });
 
-it("does not overwrite an unreadable work log or pretend the opening balance is the total", () => {
-  localStorage.setItem(workKey, "damaged log");
+it("keeps offline edits recoverable and shows a retry action", async () => {
   render(<TimeCalculator date="2026-10-02" />);
-  expect(screen.getByText(/saved work log could not be read/)).toBeVisible();
-  earnings("$0.00", "—");
+  await synced();
+  const save = vi.spyOn(server, "save").mockRejectedValue(new Error("Offline"));
   enter("01:00:00");
-  expect(localStorage.getItem(workKey)).toBe("damaged log");
-  earnings("$80.00", "—");
+  expect(
+    await screen.findByRole("button", { name: "Retry hours sync" }),
+  ).toBeVisible();
+  save.mockRestore();
+  fireEvent.click(screen.getByRole("button", { name: "Retry hours sync" }));
+  await synced();
+  expect((await server.list())[0].data.actualSeconds).toBe(3600);
 });

@@ -785,6 +785,132 @@ const formatted = await db.query(
 assert.deepEqual(formatted.rows[0].words, ["existing", "words", "here"]);
 assert.equal(formatted.rows[0].added, 0);
 pass("ordered and task list formatting does not earn words");
+await as("postgres");
+await db.exec(
+  await readFile(
+    "supabase/migrations/20261006015111_sync_work_time.sql",
+    "utf8",
+  ),
+);
+const workSave = async (date, field, value, expected = null) =>
+  (
+    await db.query("select save_work_time($1,$2,$3,$4) as result", [
+      date,
+      field,
+      JSON.stringify(value),
+      JSON.stringify(expected),
+    ])
+  ).rows[0].result;
+await as("anon");
+await assert.rejects(
+  () => workSave("2026-10-02", "actualSeconds", 11229),
+  /permission denied/,
+);
+await as("authenticated", outsider);
+await assert.rejects(
+  () => workSave("2026-10-02", "actualSeconds", 11229),
+  /Owner access/,
+);
+await as("authenticated", owner);
+const work = await workSave("2026-10-02", "actualSeconds", 11229);
+assert.equal(work.record.data.actualSeconds + 65901, 77130);
+assert.equal(
+  (await workSave("2026-10-02", "actualSeconds", 11229)).record.revision,
+  1,
+);
+assert.equal(
+  (await workSave("2026-10-02", "actualSeconds", 12000)).conflict,
+  true,
+);
+assert.equal(
+  (await workSave("2026-10-02", "taskInput", "10:00, 10:00")).conflict,
+  false,
+);
+assert.equal(
+  (await workSave("2026-10-02", "actualSeconds", 12000, 11229)).conflict,
+  false,
+);
+const staleWork = await workSave("2026-10-02", "actualSeconds", 14000, 11229);
+assert.equal(staleWork.conflict, true);
+assert.equal(staleWork.record.data.actualSeconds, 12000);
+assert.equal(staleWork.record.data.taskInput, "10:00, 10:00");
+assert.equal(
+  (await workSave("2026-10-02", "actualSeconds", 0, 12000)).record.data
+    .actualSeconds,
+  0,
+);
+assert.equal(
+  (await workSave("2026-10-02", "actualSeconds", 11229)).conflict,
+  true,
+);
+pass(
+  "work hours require owner access, field comparisons, and idempotent daily imports",
+);
+for (const bad of [-1, 1.5, "3600", null, 112589990684263])
+  await assert.rejects(() => workSave("2026-10-03", "actualSeconds", bad));
+await assert.rejects(() => workSave("2026-02-30", "actualSeconds", 1));
+await assert.rejects(() =>
+  workSave("2026-10-03", "taskInput", "x".repeat(10001)),
+);
+await assert.rejects(
+  () => workSave("2026-10-03", "actualSeconds", 112589990684262),
+  /total is too large/,
+);
+await assert.rejects(
+  () =>
+    save(
+      work.record.id,
+      "work_time",
+      { date: "2026-10-04", actualSeconds: 0 },
+      4,
+    ),
+  /identity cannot change/,
+);
+await assert.rejects(
+  () => db.query("update records set data='{}' where kind='work_time'"),
+  /permission denied/,
+);
+pass(
+  "work time rejects malformed values, overflow, date mutation, and direct writes",
+);
+const restoreWork = async (data) =>
+  db.query("select restore_records($1)", [
+    JSON.stringify([
+      { id: randomUUID(), kind: "work_time", data, deleted_at: null },
+    ]),
+  ]);
+await restoreWork({ date: "2026-10-04", actualSeconds: 3600 });
+await restoreWork({ date: "2026-10-04", actualSeconds: 3600 });
+await restoreWork({ date: "2026-10-04", taskInput: "15:00" });
+await assert.rejects(
+  () => restoreWork({ date: "2026-10-04", actualSeconds: 7200 }),
+  /Archive contains different work time/,
+);
+assert.equal(
+  (
+    await db.query(
+      "select count(*)::int n from records where kind='work_time' and data->>'date'='2026-10-04'",
+    )
+  ).rows[0].n,
+  1,
+);
+assert.equal(
+  (
+    await db.query(
+      "select data from records where kind='work_time' and data->>'date'='2026-10-04'",
+    )
+  ).rows[0].data.actualSeconds,
+  3600,
+);
+await as("authenticated", outsider);
+assert.equal(
+  (await db.query("select * from records where kind='work_time'")).rows.length,
+  0,
+);
+pass(
+  "work time archives restore once, preserve conflicting hours, and retain read isolation",
+);
+
 await db.close();
 console.log(
   `\n${checks} database behavior checks passed (real PostgreSQL via PGlite).`,

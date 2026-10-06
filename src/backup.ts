@@ -7,6 +7,11 @@ import * as api from "./service";
 const id = z.string().uuid(),
   date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const schemas: Record<string, z.ZodType> = {
+  work_time: z.object({
+    date,
+    actualSeconds: z.number().int().min(0).max(112589990684262).optional(),
+    taskInput: z.string().max(10000).optional(),
+  }),
   notebook: z.object({
     name: z.string().min(1).max(80),
     description: z.string(),
@@ -115,7 +120,7 @@ const envelope = z.object({
 export function validateManifest(input: unknown): Snapshot {
   const parsed = z
     .object({
-      version: z.union([z.literal(1), z.literal(2)]),
+      version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
       records: z.array(envelope).max(20000),
     })
     .parse(input);
@@ -226,7 +231,7 @@ export async function exportArchive(records: Snapshot) {
     "manifest.json",
     JSON.stringify(
       {
-        version: 2,
+        version: 3,
         exportedAt: new Date().toISOString(),
         records: exportRecords,
       },

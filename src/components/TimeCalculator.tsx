@@ -1,107 +1,125 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, useSyncExternalStore } from "react";
 import { calculateTimes, formatDuration } from "../timeCalculator";
-import {
-  formatEarnings,
-  parseActualTime,
-  readWorkLog,
-  totalWorkedSeconds,
-} from "../workTime";
-import type { WorkLog } from "../workTime";
-import { demo } from "../service";
+import { formatEarnings, parseActualTime } from "../workTime";
+import { WorkTimeSync } from "../workTimeSync";
+import { demo, listWorkTime, saveWorkTime } from "../service";
+
+const displayValue = (value: string | number | null) =>
+  typeof value === "number"
+    ? formatDuration(value)
+    : value === null
+      ? "Not recorded"
+      : value || "Empty list";
 
 export function TimeCalculator({ date }: { date: string }) {
   const id = useId();
-  const storageKey = `kais-notebook:time-calculator:${demo ? "preview" : "owner"}`;
-  const workStorageKey = `kais-notebook:work-time:${demo ? "preview" : "owner"}`;
-  const [work, setWork] = useState<{ log: WorkLog; error: boolean }>(() => {
-    try {
-      return {
-        log: readWorkLog(localStorage.getItem(workStorageKey)),
-        error: false,
-      };
-    } catch {
-      return { log: {}, error: true };
-    }
-  });
-  const [actualInput, setActualInput] = useState(() =>
-    work.log[date] === undefined ? "" : formatDuration(work.log[date]),
+  const [sync] = useState(
+    () =>
+      new WorkTimeSync(
+        localStorage,
+        { list: listWorkTime, save: saveWorkTime },
+        demo ? "preview" : "owner",
+      ),
   );
-  const [workSaveError, setWorkSaveError] = useState(false);
-  const [input, setInput] = useState(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
-      return saved?.date === date && typeof saved.input === "string"
-        ? saved.input
-        : "";
-    } catch {
-      return "";
-    }
-  });
-  const [saveError, setSaveError] = useState(false);
+  const state = useSyncExternalStore(sync.subscribe, sync.getSnapshot);
+  const [actualDraft, setActualDraft] = useState<string | null>(null);
+  const storedActual = sync.value(date, "actualSeconds");
+  const actualInput =
+    actualDraft ??
+    (typeof storedActual === "number" ? formatDuration(storedActual) : "");
+  const input = String(sync.value(date, "taskInput") ?? "");
   const result = calculateTimes(input);
   const actual = parseActualTime(actualInput);
-  const allTimeSeconds = work.error ? null : totalWorkedSeconds(work.log);
-
+  const allTimeSeconds = sync.total();
+  const blocked =
+    !state.ready ||
+    !!state.recoveryError ||
+    state.pending.some((p) => p.legacy || p.id in state.conflicts);
   useEffect(() => {
-    function refresh(event: StorageEvent) {
-      if (
-        event.storageArea !== localStorage ||
-        (event.key !== null && event.key !== workStorageKey)
-      )
-        return;
-      try {
-        const log = readWorkLog(localStorage.getItem(workStorageKey));
-        setWork({ log, error: false });
-        if (!workSaveError)
-          setActualInput((previous) =>
-            parseActualTime(previous).valid
-              ? log[date] === undefined
-                ? ""
-                : formatDuration(log[date])
-              : previous,
-          );
-      } catch {
-        setWork((old) => ({ ...old, error: true }));
-      }
-    }
+    const refresh = () => {
+      void sync.refresh();
+    };
+    const visible = () => {
+      if (document.visibilityState === "visible") refresh();
+      else void sync.flush();
+    };
+    refresh();
+    const interval = setInterval(refresh, 20000);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("online", refresh);
     window.addEventListener("storage", refresh);
-    return () => window.removeEventListener("storage", refresh);
-  }, [workStorageKey, date, workSaveError]);
-
+    document.addEventListener("visibilitychange", visible);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("storage", refresh);
+      document.removeEventListener("visibilitychange", visible);
+      void sync.flush();
+    };
+  }, [sync]);
   function changeActual(value: string) {
-    setActualInput(value);
+    setActualDraft(value);
     const parsed = parseActualTime(value);
-    if (!parsed.valid) return;
-    try {
-      // Merge with the latest saved days so another tab cannot erase earlier work.
-      const log = readWorkLog(localStorage.getItem(workStorageKey));
-      if (value.trim()) log[date] = parsed.seconds;
-      else delete log[date];
-      totalWorkedSeconds(log);
-      localStorage.setItem(
-        workStorageKey,
-        JSON.stringify({ version: 1, days: log }),
-      );
-      setWork({ log, error: false });
-      setWorkSaveError(false);
-    } catch {
-      setWorkSaveError(true);
-    }
-  }
-  function change(value: string) {
-    setInput(value);
-    try {
-      localStorage.setItem(storageKey, JSON.stringify({ date, input: value }));
-      setSaveError(false);
-    } catch {
-      setSaveError(true);
-    }
+    if (parsed.valid) sync.change(date, "actualSeconds", parsed.seconds);
   }
   return (
     <section className="time-calculator" aria-labelledby={`${id}-title`}>
       <div className="section-heading">
         <h2 id={`${id}-title`}>Time calculator × 7</h2>
       </div>
+      <p className="small muted" role="status" aria-label="Hours sync status">
+        {state.recoveryError ||
+          state.error ||
+          (Object.keys(state.conflicts).length
+            ? "Different values need review. Both versions are preserved."
+            : !state.ready
+              ? "Loading account hours…"
+              : state.pending.length
+                ? "Syncing hours… Totals include changes on this device."
+                : demo
+                  ? "Saved in preview"
+                  : "Hours synced")}
+      </p>
+      {state.error && (
+        <button onClick={() => void sync.refresh()}>Retry hours sync</button>
+      )}
+      {state.pending
+        .filter((edit) => edit.id in state.conflicts)
+        .map((edit) => (
+          <div
+            className="time-sync-conflict"
+            key={edit.id}
+            role="group"
+            aria-label={`Review time for ${edit.date}`}
+          >
+            <p>
+              {edit.date} ·{" "}
+              {edit.field === "actualSeconds" ? "Actual time" : "Task times"}
+            </p>
+            <p className="small">
+              This device: <strong>{displayValue(edit.value)}</strong>
+              <br />
+              Account: <strong>{displayValue(state.conflicts[edit.id])}</strong>
+            </p>
+            <button
+              onClick={() => {
+                setActualDraft(null);
+                sync.resolve(edit.id, false);
+              }}
+            >
+              Keep account value
+            </button>{" "}
+            <button
+              onClick={() => {
+                setActualDraft(null);
+                sync.resolve(edit.id, true);
+              }}
+            >
+              Use this device’s value
+            </button>
+          </div>
+        ))}
       <div className="time-calculator-card">
         <div className="time-calculator-input">
           <label htmlFor={id}>Times (MM:SS, separated by commas)</label>
@@ -109,7 +127,9 @@ export function TimeCalculator({ date }: { date: string }) {
             id={id}
             type="text"
             value={input}
-            onChange={(e) => change(e.target.value)}
+            onChange={(e) => sync.change(date, "taskInput", e.target.value)}
+            disabled={blocked}
+            onBlur={() => void sync.flush()}
             placeholder="10:00, 10:00"
             spellCheck={false}
             maxLength={10000}
@@ -125,12 +145,6 @@ export function TimeCalculator({ date }: { date: string }) {
               {result.error}
             </p>
           )}
-          {saveError && (
-            <p role="status" className="inline-error">
-              Browser storage is unavailable. This list will not survive a
-              reload.
-            </p>
-          )}
           <div className="time-calculator-actual">
             <label htmlFor={`${id}-actual`}>
               Actual time worked (HH:MM:SS)
@@ -140,6 +154,11 @@ export function TimeCalculator({ date }: { date: string }) {
               type="text"
               value={actualInput}
               onChange={(e) => changeActual(e.target.value)}
+              disabled={blocked}
+              onBlur={() => {
+                if (actual.valid) setActualDraft(null);
+                void sync.flush();
+              }}
               placeholder="00:00:00"
               spellCheck={false}
               maxLength={20}
@@ -147,7 +166,7 @@ export function TimeCalculator({ date }: { date: string }) {
               aria-describedby={`${id}-actual-help${actual.valid ? "" : ` ${id}-actual-error`}`}
             />
             <p id={`${id}-actual-help`} className="small muted">
-              Saved by day in this browser. Earnings use actual time at
+              Synced to your account by day. Earnings use actual time at
               $80/hour.
             </p>
             {!actual.valid && (
@@ -157,13 +176,6 @@ export function TimeCalculator({ date }: { date: string }) {
                 role="status"
               >
                 {actual.error} Your last valid time stays saved.
-              </p>
-            )}
-            {(work.error || workSaveError) && (
-              <p role="status" className="inline-error">
-                {workSaveError
-                  ? "Actual time could not be saved. Keep this tab open and copy your time before reloading."
-                  : "The saved work log could not be read. Your saved data has not been changed."}
               </p>
             )}
           </div>
@@ -194,7 +206,7 @@ export function TimeCalculator({ date }: { date: string }) {
               <dt>All-time earnings</dt>
               <dd>
                 <output aria-label="All-time earnings" aria-live="polite">
-                  {actual.valid && allTimeSeconds !== null && !workSaveError
+                  {actual.valid && allTimeSeconds !== null
                     ? formatEarnings(allTimeSeconds)
                     : "—"}
                 </output>
@@ -204,7 +216,7 @@ export function TimeCalculator({ date }: { date: string }) {
           <p className="small muted time-calculator-hours">
             All-time hours:{" "}
             <span aria-label="All-time hours">
-              {actual.valid && allTimeSeconds !== null && !workSaveError
+              {actual.valid && allTimeSeconds !== null
                 ? formatDuration(allTimeSeconds)
                 : "—"}
             </span>

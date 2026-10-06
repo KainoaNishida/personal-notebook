@@ -108,3 +108,7 @@ Security advisors flag the intentionally owner-checked `SECURITY DEFINER` RPCs a
 The Vercel Domains page identifies `https://commonplace-ashy.vercel.app` as the production domain. A request without cookies returns HTTP 200 and the browser renders the journal password gate. Standard Protection is already enabled; the generated deployment URL still redirects anonymous requests to Vercel authentication. The previously documented team alias is a protected preview alias, not the canonical production domain.
 
 The project is now connected to `KainoaNishida/personal-notebook`. Before this connection, production served commit `63583e5`; pushing to GitHub alone did not deploy the second-iteration changes. Confirm the deployed commit after the next push. Recovery redirect allowlisting and the Edge Function `APP_ORIGIN` still require verification against the canonical production origin.
+
+## Work hours synchronization rollout
+
+Apply `20261006015111_sync_work_time.sql` before deploying its frontend. Production records this migration as `20261006020406_sync_work_time`. See [HOURS-SYNC.md](HOURS-SYNC.md) for legacy browser import, conflict handling, backup compatibility, and verification. The original browser must open Today once after release to upload hours previously stored only there.
