@@ -29,10 +29,8 @@ import { languages } from "@codemirror/language-data";
 import { indentWithTab, isolateHistory } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import {
-  syntaxHighlighting,
-  defaultHighlightStyle,
-} from "@codemirror/language";
+import { syntaxHighlighting, HighlightStyle } from "@codemirror/language";
+import { tags } from "@lezer/highlight";
 import { Code2, Eye, ImagePlus } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { MarkdownHelpContent } from "./MarkdownHelp";
@@ -45,6 +43,24 @@ type Context = {
   client: QueryClient;
 };
 const externalUpdate = Annotation.define<boolean>();
+// The stock highlighter assumes a light canvas, including dark-blue Markdown
+// URLs. Keep editable source as readable as the rendered dark-theme preview.
+const notebookHighlight = HighlightStyle.define([
+  { tag: [tags.heading, tags.strong], color: "var(--text)", fontWeight: "600" },
+  { tag: tags.emphasis, fontStyle: "italic" },
+  { tag: tags.strikethrough, textDecoration: "line-through" },
+  {
+    tag: [tags.link, tags.url],
+    color: "var(--accent)",
+    textDecoration: "underline",
+  },
+  { tag: [tags.comment, tags.meta, tags.quote], color: "var(--muted)" },
+  { tag: [tags.keyword, tags.operatorKeyword], color: "#c4b5fd" },
+  { tag: [tags.number, tags.bool, tags.atom, tags.typeName], color: "#9bc4ee" },
+  { tag: [tags.string, tags.regexp], color: "#b7caa5" },
+  { tag: tags.invalid, color: "#fca5a5" },
+  { tag: tags.monospace, fontFamily: '"IBM Plex Mono", monospace' },
+]);
 class PreviewWidget extends WidgetType {
   root?: Root;
   resize?: ResizeObserver;
@@ -300,7 +316,7 @@ export const Editor = forwardRef<
           ]),
           // Use the browser's caret and selection. A separately positioned
           // overlay can lag behind asynchronous preview layout and pane changes.
-          syntaxHighlighting(defaultHighlightStyle),
+          syntaxHighlighting(notebookHighlight),
           EditorView.lineWrapping,
           placeholder(compact ? "Write a reflection…" : "Write a note…"),
           EditorView.contentAttributes.of({
@@ -350,7 +366,15 @@ export const Editor = forwardRef<
       }),
     });
     view.current = v;
+    // Self-hosted fonts can finish after the editor measures its first lines.
+    // Remeasure without reconfiguring the editor or changing its selection.
+    const measureFonts = () => v.requestMeasure();
+    document.fonts?.addEventListener("loadingdone", measureFonts);
+    void document.fonts?.ready.then(() => {
+      if (view.current === v) measureFonts();
+    });
     return () => {
+      document.fonts?.removeEventListener("loadingdone", measureFonts);
       v.destroy();
       view.current = null;
     };

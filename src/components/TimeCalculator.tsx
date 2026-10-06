@@ -145,51 +145,44 @@ export function TimeCalculator({ date }: { date: string }) {
               {result.error}
             </p>
           )}
-          <div className="time-calculator-actual">
-            <label htmlFor={`${id}-actual`}>
-              Actual time worked (HH:MM:SS)
-            </label>
-            <input
-              id={`${id}-actual`}
-              type="text"
-              value={actualInput}
-              onChange={(e) => changeActual(e.target.value)}
-              disabled={blocked}
-              onBlur={() => {
-                if (actual.valid) setActualDraft(null);
-                void sync.flush();
-              }}
-              placeholder="00:00:00"
-              spellCheck={false}
-              maxLength={20}
-              aria-invalid={!actual.valid}
-              aria-describedby={`${id}-actual-help${actual.valid ? "" : ` ${id}-actual-error`}`}
-            />
-            <p id={`${id}-actual-help`} className="small muted">
-              Synced to your account by day. Earnings use actual time at
-              $80/hour.
-            </p>
-            {!actual.valid && (
-              <p
-                id={`${id}-actual-error`}
-                className="inline-error"
-                role="status"
-              >
-                {actual.error} Your last valid time stays saved.
-              </p>
-            )}
+          <div className="time-calculator-total">
+            <span className="small muted">Maximum time today · HH:MM:SS</span>
+            <output
+              htmlFor={id}
+              aria-label="Time total multiplied by seven"
+              aria-live="polite"
+            >
+              {result.valid ? result.total : "—"}
+            </output>
           </div>
         </div>
-        <div className="time-calculator-total">
-          <span className="small muted">Maximum time today · HH:MM:SS</span>
-          <output
-            htmlFor={id}
-            aria-label="Time total multiplied by seven"
-            aria-live="polite"
-          >
-            {result.valid ? result.total : "—"}
-          </output>
-          <dl className="time-calculator-earnings small">
+        <div className="time-calculator-actual">
+          <label htmlFor={`${id}-actual`}>Actual time worked (HH:MM:SS)</label>
+          <input
+            id={`${id}-actual`}
+            type="text"
+            value={actualInput}
+            onChange={(e) => changeActual(e.target.value)}
+            disabled={blocked}
+            onBlur={() => {
+              if (actual.valid) setActualDraft(null);
+              void sync.flush();
+            }}
+            placeholder="00:00:00"
+            spellCheck={false}
+            maxLength={20}
+            aria-invalid={!actual.valid}
+            aria-describedby={`${id}-actual-help${actual.valid ? "" : ` ${id}-actual-error`}`}
+          />
+          <p id={`${id}-actual-help`} className="small muted">
+            Synced to your account by day. Earnings use actual time at $80/hour.
+          </p>
+          {!actual.valid && (
+            <p id={`${id}-actual-error`} className="inline-error" role="status">
+              {actual.error} Your last valid time stays saved.
+            </p>
+          )}
+          <dl className="time-calculator-earnings">
             <div>
               <dt>Today’s earnings</dt>
               <dd>
@@ -202,17 +195,9 @@ export function TimeCalculator({ date }: { date: string }) {
                 </output>
               </dd>
             </div>
-            <div>
-              <dt>All-time earnings</dt>
-              <dd>
-                <output aria-label="All-time earnings" aria-live="polite">
-                  {actual.valid && allTimeSeconds !== null
-                    ? formatEarnings(allTimeSeconds)
-                    : "—"}
-                </output>
-              </dd>
-            </div>
           </dl>
+        </div>
+        <div className="time-calculator-footer">
           <p className="small muted time-calculator-hours">
             All-time hours:{" "}
             <span aria-label="All-time hours">
@@ -224,6 +209,18 @@ export function TimeCalculator({ date }: { date: string }) {
           <p className="small muted time-calculator-baseline">
             Includes 18:18:21 worked before Oct 2, 2026.
           </p>
+          <dl className="time-calculator-earnings">
+            <div>
+              <dt>All-time earnings</dt>
+              <dd>
+                <output aria-label="All-time earnings" aria-live="polite">
+                  {actual.valid && allTimeSeconds !== null
+                    ? formatEarnings(allTimeSeconds)
+                    : "—"}
+                </output>
+              </dd>
+            </div>
+          </dl>
         </div>
       </div>
     </section>

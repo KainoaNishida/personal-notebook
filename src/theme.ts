@@ -42,7 +42,7 @@ export function themeTokens(settings: Settings): Record<string, string> {
     accent =
       settings.accentColor && /^#[0-9a-f]{6}$/i.test(settings.accentColor)
         ? readableAccent(settings.accentColor)
-        : undefined;
+        : "#c9ced9";
   if (main && /^#[0-9a-f]{6}$/i.test(main)) {
     const light = lightColor(main),
       ink = light ? "#18181b" : "#fafafa";
@@ -50,11 +50,12 @@ export function themeTokens(settings: Settings): Record<string, string> {
       "--bg": main,
       "--text": ink,
       "--muted": light ? "#303036" : "#dedee3",
-      "--sidebar": `color-mix(in srgb, ${main} 95%, ${ink})`,
+      "--sidebar": `color-mix(in srgb, ${main} 75%, #000000)`,
       "--surface": `color-mix(in srgb, ${main} 94%, ${ink})`,
       "--surface2": `color-mix(in srgb, ${main} 88%, ${ink})`,
       "--border": `color-mix(in srgb, ${main} 70%, ${ink})`,
       "--rhythm-empty": `color-mix(in srgb, ${main} 80%, ${ink})`,
+      "--selected": `color-mix(in srgb, ${accent} 18%, ${main})`,
     });
   }
   if (accent && /^#[0-9a-f]{6}$/i.test(accent))
@@ -65,13 +66,17 @@ export function themeTokens(settings: Settings): Record<string, string> {
   if (main === "#1c1d20")
     Object.assign(tokens, {
       "--bg": "#1c1d20",
-      "--sidebar": "#242529",
-      "--surface": "#242529",
-      "--surface2": "#2e3035",
-      "--border": "#3b3d42",
-      "--text": "#eeeae4",
-      "--muted": "#b1aea8",
-      "--rhythm-empty": "#3b3d42",
+      "--sidebar": "#151619",
+      "--surface": "#25262a",
+      "--surface2": "#2d2f34",
+      "--border": "#3c3e45",
+      "--text": "#eceef1",
+      "--muted": "#adb2bc",
+      "--rhythm-empty": "#2a2c31",
+      "--selected":
+        accent === "#c9ced9"
+          ? "#363a43"
+          : `color-mix(in srgb, ${accent} 18%, ${main})`,
     });
   return tokens;
 }

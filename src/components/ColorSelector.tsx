@@ -3,6 +3,7 @@ import { darkBackgrounds, readableAccent } from "../theme";
 
 export const validColor = (value: string) => /^#[0-9a-f]{6}$/i.test(value);
 const presets = [
+  "#c9ced9",
   "#e8b68a",
   "#f59a56",
   "#f87171",
@@ -13,7 +14,7 @@ const presets = [
   "#94a3b8",
 ];
 const backgroundNames = [
-  "Calm desk",
+  "Graphite",
   "Charcoal",
   "Midnight",
   "Forest",

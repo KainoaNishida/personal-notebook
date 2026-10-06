@@ -1,3 +1,4 @@
+import { Navigation } from "./components/Navigation";
 import { TimeCalculator } from "./components/TimeCalculator";
 import { hasUnsyncedWorkTime } from "./workTimeSync";
 import { APP_NAME } from "./branding";
@@ -5,7 +6,6 @@ import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import type { CSSProperties, FormEvent } from "react";
 import {
   BrowserRouter,
-  NavLink,
   Link,
   Route,
   Routes,
@@ -25,13 +25,8 @@ import {
   ArrowUpRight,
   ArrowLeft,
   Plus,
-  Search,
   PanelLeft,
-  BookOpen,
-  CalendarDays,
   Files,
-  Settings as SettingsIcon,
-  LogOut,
   Check,
   Archive,
   RotateCcw,
@@ -107,7 +102,18 @@ function Workspace() {
   const q = useRecords(),
     [error, setError] = useState(""),
     [search, setSearch] = useState(""),
-    [collapsed, setCollapsed] = useState(false);
+    [collapsed, setCollapsed] = useState(false),
+    [navigationOpen, setNavigationOpen] = useState(false);
+  const [narrowNavigation, setNarrowNavigation] = useState(
+    () => window.matchMedia("(max-width: 850px)").matches,
+  );
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 850px)");
+    const update = () => setNarrowNavigation(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  const navigationButton = useRef<HTMLButtonElement>(null);
   const records = q.data || [];
   const setting = ofKind(records, "settings")[0];
   const settings: Settings = setting?.data || {
@@ -132,6 +138,7 @@ function Workspace() {
       "--rhythm-empty",
       "--accent",
       "--accent-text",
+      "--selected",
     ]) {
       if (tokens[key]) style.setProperty(key, tokens[key]);
       else style.removeProperty(key);
@@ -144,97 +151,68 @@ function Workspace() {
         .then(() => q.refetch())
         .catch((e) => setError(e.message));
   }, [q.data]);
+  const routeId = route.pathname.split("/")[2];
+  const entry = ofKind(records, "entry").find((r) => r.id === routeId);
+  const notebook = ofKind(records, "notebook").find(
+    (n) => n.id === routeId || n.id === entry?.data.notebookId,
+  );
+  const isWriting =
+    !!notebook &&
+    !notebook.data.research &&
+    (/^\/entries\//.test(route.pathname) ||
+      /^\/notebooks\/[^/]+$/.test(route.pathname));
+  const context = search
+    ? "Search results"
+    : notebook?.data.name ||
+      ({
+        "/": "Today",
+        "/notebooks": "Notebooks",
+        "/settings": "Settings",
+        "/help/markdown": "Markdown guide",
+      }[route.pathname] ??
+        "Research");
   return (
     <div className={`app-shell ${collapsed ? "collapsed" : ""}`}>
-      <aside className="app-sidebar">
-        <Link to="/" className="brand" aria-label={`${APP_NAME} home`}>
-          <BookOpen size={23} />
-          <span>{APP_NAME}</span>
-        </Link>
-
-        <nav>
-          {[
-            [CalendarDays, "Today", "/"],
-            [BookOpen, "Notebooks", "/notebooks"],
-          ].map(([Icon, label, path]) => {
-            const I = Icon as typeof CalendarDays;
-            return (
-              <NavLink
-                aria-label={String(label)}
-                key={String(path)}
-                to={String(path)}
-                end={path === "/"}
-              >
-                <I size={18} />
-                <span>{String(label)}</span>
-                {path === "/" && <span className="nav-dot" />}
-              </NavLink>
-            );
-          })}
-        </nav>
-        <div className="sidebar-subhead">
-          <span>Quick Links</span>
-        </div>
-        <div className="notebook-nav">
-          {ns.map((n) => (
-            <NavLink key={n.id} to={`/notebooks/${n.id}`}>
-              <span style={{ color: n.data.color }}>
-                <SubjectIcon name={n.data.icon} size={17} />
-              </span>
-              <span>{n.data.name}</span>
-            </NavLink>
-          ))}
-        </div>
-        <div className="sidebar-bottom">
-          <NavLink to="/settings" aria-label="Settings">
-            <SettingsIcon size={17} />
-            <span>Settings</span>
-          </NavLink>
-          <button
-            className="profile"
-            aria-label="Sign out"
-            onClick={() => void api.signOut().catch((e) => setError(e.message))}
-          >
-            <span className="avatar">K</span>
-            <span>
-              {APP_NAME}
-              <small>{api.demo ? "Sample workspace" : "Owner account"}</small>
-            </span>
-            <LogOut size={16} />
-          </button>
-        </div>
-      </aside>
+      <Navigation
+        notebooks={ns}
+        search={search}
+        onSearch={setSearch}
+        onNavigate={() => setSearch("")}
+        onSignOut={() => void api.signOut().catch((e) => setError(e.message))}
+        open={navigationOpen}
+        onOpenChange={setNavigationOpen}
+        returnFocus={navigationButton}
+      />
       <div className="main-shell">
         <header className="topbar">
           <div className="row">
             <button
+              ref={navigationButton}
               className="icon-button"
               aria-label="Toggle sidebar"
-              onClick={() => setCollapsed(!collapsed)}
+              aria-expanded={narrowNavigation ? navigationOpen : !collapsed}
+              onClick={() => {
+                if (narrowNavigation) setNavigationOpen(true);
+                else setCollapsed((value) => !value);
+              }}
             >
               <PanelLeft size={18} />
             </button>
+            {isWriting && !search ? (
+              <h1 className="topbar-label">{context}</h1>
+            ) : (
+              <span className="topbar-label">{context}</span>
+            )}
           </div>
-          <div className="row">
-            <label className="search">
-              <Search size={16} />
-              <input
-                aria-label="Search entries"
-                placeholder="Search notes…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              {search && (
-                <button
-                  className="icon-button"
-                  onClick={() => setSearch("")}
-                  aria-label="Clear search"
-                >
-                  ×
-                </button>
-              )}
-            </label>
-          </div>
+          {!search && isWriting && (
+            <Link
+              className="topbar-pages"
+              to={`/notebooks/${notebook.id}/pages`}
+            >
+              {entry ? "Back to pages" : "All pages"}
+              <ArrowUpRight size={15} />
+            </Link>
+          )}
         </header>
         {api.demo && (
           <div className="preview-banner">
@@ -785,18 +763,6 @@ function NotebookPage({
   if (legacy) return <Navigate to={`/entries/${legacy.id}`} replace />;
   return (
     <main className="page daily-page">
-      <div className="row between">
-        <h1>{notebook.data.name}</h1>
-        <Link to={`/notebooks/${notebook.id}/pages`}>All pages</Link>
-      </div>
-      <p className="entry-date">
-        {displayDate(date, {
-          weekday: "long",
-          month: "long",
-          day: "numeric",
-          year: "numeric",
-        })}
-      </p>
       <DailyEntry
         key={`${notebook.id}:${date}`}
         notebook={notebook}
@@ -816,23 +782,12 @@ function EntryPage({ records }: { records: Snapshot }) {
     return <Navigate to={`/papers/${record.data.paperId}`} replace />;
   return record && !record.deleted_at ? (
     <main className="page daily-page">
-      <Link to={`/notebooks/${record.data.notebookId}/pages`}>
-        Back to pages
-      </Link>
-      <h1>
-        {ofKind(records, "notebook").find(
-          (n) => n.id === record.data.notebookId,
-        )?.data.name || "Notebook"}
-      </h1>
-      <p className="entry-date">
-        {displayDate(record.data.date, {
-          weekday: "long",
-          month: "long",
-          day: "numeric",
-          year: "numeric",
-        })}
-      </p>
-      <EntryWriting key={record.id} record={record} records={records} />
+      <EntryWriting
+        key={record.id}
+        record={record}
+        records={records}
+        headingDate={record.data.date}
+      />
     </main>
   ) : (
     <Empty title="Entry not found.">It may be in Trash in Settings.</Empty>
@@ -842,10 +797,12 @@ export function EntryWriting({
   record,
   records,
   editorRef,
+  headingDate,
 }: {
   record: RecordItem<"entry">;
   records: Snapshot;
   editorRef?: React.RefObject<EditorHandle | null>;
+  headingDate?: string;
 }) {
   const draft = useDraft(record),
     nav = useNavigate(),
@@ -858,6 +815,19 @@ export function EntryWriting({
   }
   return (
     <div className="entry-writing">
+      {headingDate && (
+        <div className="entry-heading">
+          <p className="entry-date">
+            {displayDate(headingDate, {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            })}
+          </p>
+          <DraftStatus draft={draft} />
+        </div>
+      )}
       <EntryLabels
         value={draft.value}
         records={records}
@@ -887,7 +857,7 @@ export function EntryWriting({
         }}
       />
       <div className="row between entry-bottom">
-        <DraftStatus draft={draft} />
+        {!headingDate && <DraftStatus draft={draft} />}
         <span className="small muted">
           {draft.value.markdown.trim().split(/\s+/).filter(Boolean).length}{" "}
           words · Markdown
@@ -1217,7 +1187,7 @@ function SettingsPage({
     setting = ofKind(records, "settings")[0],
     [tz, setTz] = useState(settings.timezone),
     [mainColor, setMainColor] = useState(settings.mainColor || "#1c1d20"),
-    [accentColor, setAccentColor] = useState(settings.accentColor || "#e8b68a"),
+    [accentColor, setAccentColor] = useState(settings.accentColor || "#c9ced9"),
     [message, setMessage] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -1320,7 +1290,7 @@ function SettingsPage({
           <button
             onClick={() => {
               setMainColor("#1c1d20");
-              setAccentColor("#e8b68a");
+              setAccentColor("#c9ced9");
               void save(
                 "settings",
                 setting?.id || uid(),

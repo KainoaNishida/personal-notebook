@@ -4,6 +4,8 @@ A private notebook for writing, daily reflections, and studying research papers.
 
 This notebook is for my own use, at least for now.
 
+The [Graphite interface](docs/GRAPHITE.md) uses a spacious writing canvas, a responsive navigation drawer, and self-hosted typography. Today retains its 14-day Activity tracker and account-synced hours.
+
 ## Development
 
 Use Node 24, then run `npm ci` and `npm run dev`. See [deployment and configuration](docs/DEPLOYMENT.md) for setup.

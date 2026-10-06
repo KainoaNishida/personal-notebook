@@ -61,6 +61,7 @@ export function DailyEntry({
         key={existing?.id || id}
         record={existing || blank}
         records={records}
+        headingDate={compact ? undefined : date}
       />
     </div>
   );

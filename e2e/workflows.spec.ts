@@ -858,6 +858,15 @@ test("research caret stays at the insertion point through source links and pane 
   await editor.press("ControlOrMeta+End");
   await page.keyboard.type(" after navigation");
   await assertNativeCaret();
+  await expect(
+    page.locator(".textLayer span").filter({ hasText: "Attention combines" }),
+  ).toBeVisible();
+  const sourceColor = await editor
+    .locator("span")
+    .filter({ hasText: /^\(?annotation:/ })
+    .first()
+    .evaluate((el) => getComputedStyle(el).color);
+  expect(sourceColor).toBe("rgb(201, 206, 217)");
   await page.screenshot({
     path: "test-results/fourth-research-caret.png",
     fullPage: true,

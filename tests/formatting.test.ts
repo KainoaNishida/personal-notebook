@@ -71,11 +71,15 @@ describe("formatting commands", () => {
     }
   });
 });
-it("uses the Calm desk palette without replacing saved custom backgrounds", () => {
+it("uses the Graphite palette without replacing saved custom backgrounds", () => {
   expect(darkBackgrounds).toContain("#18181b");
-  expect(themeTokens({ theme: "dark", timezone: "UTC" })["--bg"]).toBe(
-    "#1c1d20",
-  );
+  expect(themeTokens({ theme: "dark", timezone: "UTC" })).toMatchObject({
+    "--bg": "#1c1d20",
+    "--sidebar": "#151619",
+    "--surface": "#25262a",
+    "--accent": "#c9ced9",
+    "--selected": "#363a43",
+  });
   expect(
     themeTokens({
       theme: "dark",
@@ -87,14 +91,17 @@ it("uses the Calm desk palette without replacing saved custom backgrounds", () =
 });
 
 it("keeps default and normalized custom accents readable on raised surfaces", () => {
-  for (const ink of [
-    "#eeeae4",
-    "#b1aea8",
-    "#e8b68a",
-    readableAccent("#101010"),
-  ]) {
-    expect(
-      (luminance(ink) + 0.05) / (luminance("#2e3035") + 0.05),
-    ).toBeGreaterThanOrEqual(4.5);
+  const tokens = themeTokens({ theme: "dark", timezone: "UTC" });
+  for (const background of ["--bg", "--surface", "--surface2", "--selected"]) {
+    for (const ink of [
+      tokens["--text"],
+      tokens["--muted"],
+      tokens["--accent"],
+      readableAccent("#101010"),
+    ]) {
+      expect(
+        (luminance(ink) + 0.05) / (luminance(tokens[background]) + 0.05),
+      ).toBeGreaterThanOrEqual(4.5);
+    }
   }
 });
